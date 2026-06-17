@@ -140,6 +140,19 @@ function runMigrations(db: Database.Database) {
   try { db.exec(`ALTER TABLE promotions ADD COLUMN config TEXT DEFAULT '{}'`); } catch {}
 
   seedDefaults(db);
+
+  // Migration: update existing promos with proper config (idempotent — only updates rows with empty config)
+  db.exec(`
+    UPDATE promotions SET config = '{"pickCount":2,"payCount":1,"eligibleProductIds":[1,2,3,4,5]}'
+    WHERE name = '2x1 en Bebidas Calientes' AND (config IS NULL OR config = '{}');
+    UPDATE promotions SET config = '{"pickCount":3,"payCount":2,"eligibleProductIds":[7,8,9]}'
+    WHERE name = '3x1 en Panaderia' AND (config IS NULL OR config = '{}');
+    UPDATE promotions SET config = '{"slots":[{"label":"Bebida Caliente","eligibleProductIds":[1,2,3,4,5],"required":true},{"label":"Panaderia","eligibleProductIds":[7,8,9],"required":true}]}'
+    WHERE name = 'Desayuno Completo' AND (config IS NULL OR config = '{}');
+    UPDATE promotions SET config = '{"slots":[{"label":"Bebidas","eligibleProductIds":[6,10],"required":true,"maxSelect":2},{"label":"Panaderia","eligibleProductIds":[7,8,9],"required":true,"maxSelect":2}]}'
+    WHERE name = 'Combo Amigos' AND (config IS NULL OR config = '{}');
+  `);
+}
 }
 
 function seedDefaults(db: Database.Database) {
