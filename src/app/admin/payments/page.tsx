@@ -10,16 +10,24 @@ interface PaymentMethod {
   details: string[];
 }
 
+const METHOD_TYPES = ["Efectivo", "Tarjeta", "Transferencia", "PayPal"];
+const SINGLE_ONLY = ["Efectivo", "Tarjeta"];
+
 export default function AdminPayments() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+
+  // Edit state
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editDetails, setEditDetails] = useState("");
+  const [editError, setEditError] = useState("");
+
+  // New method modal
   const [showNew, setShowNew] = useState(false);
-  const [newName, setNewName] = useState("");
+  const [newName, setNewName] = useState("Transferencia");
   const [newDetails, setNewDetails] = useState("");
   const [newError, setNewError] = useState("");
 
@@ -48,16 +56,34 @@ export default function AdminPayments() {
     setEditId(m.id);
     setEditName(m.name);
     setEditDetails(m.details.join("\n"));
+    setEditError("");
   };
 
   const cancelEdit = () => {
     setEditId(null);
     setEditName("");
     setEditDetails("");
+    setEditError("");
   };
 
   const saveEdit = async () => {
     if (!editId) return;
+    setEditError("");
+
+    if (!editName.trim()) {
+      setEditError("Selecciona un tipo de metodo");
+      return;
+    }
+
+    // Check single-only restriction
+    if (SINGLE_ONLY.includes(editName.trim())) {
+      const existing = methods.find(m => m.name === editName.trim() && m.id !== editId);
+      if (existing) {
+        setEditError(`Ya existe un metodo de tipo "${editName.trim()}". Solo se permite uno.`);
+        return;
+      }
+    }
+
     const detailsArray = editDetails
       .split("\n")
       .map((l) => l.trim())
@@ -79,9 +105,25 @@ export default function AdminPayments() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const handleCreate = async () => {
-    if (!newName.trim()) { setNewError("Nombre requerido"); return; }
+  const openNewModal = () => {
+    setNewName("Transferencia");
+    setNewDetails("");
     setNewError("");
+    setShowNew(true);
+  };
+
+  const handleCreate = async () => {
+    if (!newName.trim()) { setNewError("Selecciona un tipo de metodo"); return; }
+    setNewError("");
+
+    if (SINGLE_ONLY.includes(newName.trim())) {
+      const existing = methods.find(m => m.name === newName.trim());
+      if (existing) {
+        setNewError(`Ya existe un metodo de tipo "${newName.trim()}". Solo se permite uno.`);
+        return;
+      }
+    }
+
     const detailsArray = newDetails.split("\n").map(l => l.trim()).filter(Boolean);
     const res = await fetch("/api/payments", {
       method: "POST",
@@ -91,25 +133,13 @@ export default function AdminPayments() {
     const data = await res.json();
     if (data.success) {
       setShowNew(false);
-      setNewName("");
-      setNewDetails("");
       fetchMethods();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } else {
       setNewError(data.error || "Error al crear");
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex h-screen bg-[var(--admin-bg)]">
-        <AdminSidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />}
-        <main className="flex-1 flex items-center justify-center">
-          <p className="text-xs text-[var(--admin-text-muted)] animate-pulse">Cargando...</p>
-        </main>
-      </div>
-    );
-  }
 
   const getIcon = (name: string) => {
     const n = name.toLowerCase();
@@ -123,12 +153,29 @@ export default function AdminPayments() {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
       </svg>
     );
-    return (
+    if (n.includes("tarjeta")) return (
       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
       </svg>
     );
+    return (
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      </svg>
+    );
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-[var(--admin-bg)]">
+        <AdminSidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        {sidebarOpen && <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSidebarOpen(false)} />}
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-xs text-[var(--admin-text-muted)] animate-pulse">Cargando...</p>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[var(--admin-bg)]">
@@ -144,7 +191,7 @@ export default function AdminPayments() {
             <h1 className="text-xl font-semibold text-[var(--admin-text)]">Pasarelas de Pago</h1>
             <p className="text-xs text-[var(--admin-text-muted)] mt-0.5">Configura los metodos de pago para los clientes</p>
           </div>
-          <button onClick={() => setShowNew(true)}
+          <button onClick={openNewModal}
             className="px-4 py-2 bg-[var(--admin-accent)] text-white text-sm rounded-xl hover:bg-[var(--admin-accent-hover)] transition-all font-medium">
             + Nuevo Metodo
           </button>
@@ -157,16 +204,21 @@ export default function AdminPayments() {
               {editId === m.id ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Nombre del metodo</label>
-                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all" />
+                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Tipo de metodo</label>
+                    <select value={editName} onChange={(e) => setEditName(e.target.value)}
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all">
+                      {METHOD_TYPES.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Detalles (uno por linea)</label>
+                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Detalles (uno por linea)</label>
                     <textarea value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={4}
                       className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
                     <p className="text-[10px] text-[var(--admin-placeholder)] mt-1">Cada linea sera un dato (ej: Banco: BBVA, Cuenta: XXX)</p>
                   </div>
+                  {editError && <p className="text-red-500 text-xs">{editError}</p>}
                   <div className="flex items-center gap-2">
                     <button onClick={saveEdit} className="px-4 py-2 bg-[var(--admin-accent)] text-white text-xs rounded-xl hover:bg-[var(--admin-accent-hover)] font-medium transition-all">Guardar</button>
                     <button onClick={cancelEdit} className="px-4 py-2 border border-[var(--admin-border)] text-[var(--admin-text-secondary)] text-xs rounded-xl hover:bg-[var(--admin-bg-tertiary)] hover:text-[var(--admin-text)] transition-all">Cancelar</button>
@@ -176,7 +228,7 @@ export default function AdminPayments() {
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${m.enabled ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/5 text-red-400/40"}`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${m.enabled ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-red-500/5 text-red-400/40"}`}>
                         {getIcon(m.name)}
                       </div>
                       <div>
@@ -212,45 +264,63 @@ export default function AdminPayments() {
               )}
             </div>
           ))}
+        </div>
 
-          {/* New method form */}
-          {showNew && (
-            <div className="rounded-2xl border border-[var(--admin-accent)]/30 bg-[var(--admin-bg-secondary)] p-5 animate-scale-in">
-              <h3 className="text-sm font-semibold text-[var(--admin-text)] mb-4">Nuevo Metodo de Pago</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Nombre *</label>
-                  <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                    placeholder="Ej: Mercado Pago, OXXO, Stripe..."
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all" />
+        {/* New method modal */}
+        {showNew && (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowNew(false)} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="bg-[var(--admin-bg)] rounded-2xl w-full max-w-md shadow-2xl border border-[var(--admin-accent)]/20 overflow-hidden animate-scale-in">
+                <div className="p-5 border-b border-[var(--admin-border)] flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-[var(--admin-text)]">Nuevo Metodo de Pago</h2>
+                  <button onClick={() => setShowNew(false)} className="p-1.5 rounded-xl hover:bg-[var(--admin-bg-hover)]">
+                    <svg className="w-5 h-5 text-[var(--admin-text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <div>
-                  <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Detalles (uno por linea)</label>
-                  <textarea value={newDetails} onChange={(e) => setNewDetails(e.target.value)} rows={3}
-                    className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Tipo de metodo *</label>
+                    <select value={newName} onChange={(e) => setNewName(e.target.value)}
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all">
+                      {METHOD_TYPES.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    {SINGLE_ONLY.includes(newName) && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Solo se permite un metodo de este tipo.</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Detalles (uno por linea)</label>
+                    <textarea value={newDetails} onChange={(e) => setNewDetails(e.target.value)} rows={3}
+                      placeholder={newName === "Transferencia" ? "Banco: BBVA\nCuenta: 0123456789\nCLABE: 012345678901234567\nTitular: Mi Negocio" : newName === "PayPal" ? "Correo PayPal: pagos@minegocio.com" : "Detalles adicionales..."}
+                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
+                  </div>
+                  {newError && <p className="text-red-500 text-xs">{newError}</p>}
                 </div>
-                {newError && <p className="text-red-400 text-xs">{newError}</p>}
-                <div className="flex items-center gap-2">
-                  <button onClick={handleCreate} className="px-4 py-2 bg-[var(--admin-accent)] text-white text-xs rounded-xl hover:bg-[var(--admin-accent-hover)] font-medium transition-all">Crear</button>
-                  <button onClick={() => { setShowNew(false); setNewName(""); setNewDetails(""); setNewError(""); }}
-                    className="px-4 py-2 border border-[var(--admin-border)] text-[var(--admin-text-secondary)] text-xs rounded-xl hover:bg-[var(--admin-bg-tertiary)] hover:text-[var(--admin-text)] transition-all">Cancelar</button>
+                <div className="p-5 border-t border-[var(--admin-border)] flex gap-3">
+                  <button onClick={() => { setShowNew(false); setNewName("Transferencia"); setNewDetails(""); setNewError(""); }}
+                    className="flex-1 py-2.5 border border-[var(--admin-border)] text-sm text-[var(--admin-text-secondary)] rounded-xl hover:bg-[var(--admin-bg-hover)] transition-all font-medium">
+                    Cancelar
+                  </button>
+                  <button onClick={handleCreate}
+                    className="flex-1 py-2.5 bg-[var(--admin-accent)] text-white text-sm rounded-xl hover:bg-[var(--admin-accent-hover)] font-semibold transition-all">
+                    Crear Metodo
+                  </button>
                 </div>
               </div>
             </div>
-          )}
+          </>
+        )}
 
-          {saved && (
-            <div className="fixed bottom-6 right-6 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl animate-fade-in">
-              Cambios guardados correctamente
-            </div>
-          )}
-
-          <div className="rounded-2xl border border-dashed border-[var(--admin-border)] p-5">
-            <p className="text-[10px] text-[var(--admin-text-muted)] text-center">
-              El agente IA usara automaticamente los datos configurados aqui para responder preguntas sobre pagos. Solo los metodos activados se mostraran a los clientes.
-            </p>
+        {saved && (
+          <div className="fixed bottom-6 right-6 px-4 py-2 bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs rounded-xl animate-fade-in font-medium">
+            Cambios guardados correctamente
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

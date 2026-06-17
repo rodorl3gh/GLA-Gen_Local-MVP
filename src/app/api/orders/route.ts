@@ -7,9 +7,12 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from");
   const to = searchParams.get("to");
 
-  // Default: last 60 days
   const now = Math.floor(Date.now() / 1000);
-  const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : now - 60 * 86400;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartTs = Math.floor(todayStart.getTime() / 1000);
+
+  const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : todayStartTs;
   const toTs = to ? Math.floor(new Date(to).getTime() / 1000) + 86400 : now;
 
   const orders = db
@@ -23,31 +26,29 @@ export async function GET(req: NextRequest) {
       created_at: new Date(o.created_at * 1000).toISOString(),
     }));
 
-  // Stats for filtered range
   const total = orders.length;
   const pendientes = orders.filter((o: any) => o.status === "pending").length;
   const ingresos = orders
     .filter((o: any) => o.status !== "cancelled")
     .reduce((s: number, o: any) => s + Number(o.total), 0);
 
-  // Hoy: count only today's orders
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayTs = Math.floor(todayStart.getTime() / 1000);
   const hoy = orders.filter(
-    (o: any) => new Date(o.created_at).getTime() / 1000 >= todayTs
+    (o: any) => new Date(o.created_at).getTime() / 1000 >= todayStartTs
   ).length;
 
   const ingresosHoy = orders
     .filter(
       (o: any) =>
         o.status !== "cancelled" &&
-        new Date(o.created_at).getTime() / 1000 >= todayTs
+        new Date(o.created_at).getTime() / 1000 >= todayStartTs
     )
     .reduce((s: number, o: any) => s + Number(o.total), 0);
 
+  const aprobados = orders.filter((o: any) => o.payment_status === "approved").length;
+  const rechazados = orders.filter((o: any) => o.payment_status === "rejected").length;
+
   return NextResponse.json({
     orders,
-    stats: { total, hoy, pendientes, ingresos_hoy: ingresosHoy },
+    stats: { total, hoy, pendientes, ingresos_hoy: ingresosHoy, ingresos, aprobados, rechazados },
   });
 }

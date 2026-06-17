@@ -6,17 +6,17 @@ import AdminSidebar from "@/components/admin/Sidebar";
 type ViewMode = "list" | "kanban";
 
 const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
-  pending:    { label: "Pendiente", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-  preparing:  { label: "Preparando", cls: "bg-sky-500/15 text-sky-400 border-sky-500/30", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  delivered:  { label: "Entregado", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", icon: "M5 13l4 4L19 7" },
-  cancelled:  { label: "Cancelado", cls: "bg-red-500/15 text-red-400 border-red-500/30", icon: "M6 18L18 6M6 6l12 12" },
+  pending:    { label: "Pendiente", cls: "bg-amber-200 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400 border-amber-300 dark:border-amber-500/30", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  preparing:  { label: "Preparando", cls: "bg-sky-200 text-sky-800 dark:bg-sky-500/20 dark:text-sky-400 border-sky-300 dark:border-sky-500/30", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  delivered:  { label: "Entregado", cls: "bg-emerald-200 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30", icon: "M5 13l4 4L19 7" },
+  cancelled:  { label: "Cancelado", cls: "bg-red-200 text-red-800 dark:bg-red-500/20 dark:text-red-400 border-red-300 dark:border-red-500/30", icon: "M6 18L18 6M6 6l12 12" },
 };
 
 const PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
-  pending:   { label: "Pago Pendiente", cls: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
-  approved:  { label: "Pago Aprobado", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
-  rejected:  { label: "Pago Rechazado", cls: "bg-red-500/10 text-red-500 border-red-500/20" },
-  refunded:  { label: "Reembolsado", cls: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+  pending:   { label: "Pago Pendiente", cls: "bg-amber-200 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400 border-amber-300 dark:border-amber-500/20" },
+  approved:  { label: "Pago Aprobado", cls: "bg-emerald-200 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/20" },
+  rejected:  { label: "Pago Rechazado", cls: "bg-red-200 text-red-800 dark:bg-red-500/15 dark:text-red-400 border-red-300 dark:border-red-500/20" },
+  refunded:  { label: "Reembolsado", cls: "bg-purple-200 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400 border-purple-300 dark:border-purple-500/20" },
 };
 
 const STATUS_ORDER = ["pending", "preparing", "delivered", "cancelled"];
@@ -40,6 +40,10 @@ function formatDate(isoString: string): string {
   });
 }
 
+function toLocalDate(isoString: string): string {
+  try { return new Date(isoString).toISOString().split("T")[0]; } catch { return ""; }
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,17 +53,35 @@ export default function AdminOrders() {
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
   const [draggedOrderId, setDraggedOrderId] = useState<number | null>(null);
 
-  // Date filter
   const today = new Date().toISOString().split("T")[0];
-  const twoMonthsAgo = new Date(Date.now() - 60 * 86400000).toISOString().split("T")[0];
-  const [dateFrom, setDateFrom] = useState(twoMonthsAgo);
+  const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
 
-  const fetchOrders = useCallback(async () => {
+  // Report modal state
+  const [showReport, setShowReport] = useState(false);
+  const oneMonthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+  const [reportFrom, setReportFrom] = useState(oneMonthAgo);
+  const [reportTo, setReportTo] = useState(today);
+  const [reportFilters, setReportFilters] = useState({
+    total: true,
+    entregados: true,
+    cancelados: true,
+    efectivo: true,
+    tarjeta: true,
+    transferencia: true,
+    paypal: true,
+    nombre: true,
+    numero: true,
+    notas: true,
+  });
+
+  const fetchOrders = useCallback(async (from?: string, to?: string) => {
     try {
       const params = new URLSearchParams();
-      if (dateFrom) params.set("from", dateFrom);
-      if (dateTo) params.set("to", dateTo);
+      const f = from ?? dateFrom;
+      const t = to ?? dateTo;
+      if (f) params.set("from", f);
+      if (t) params.set("to", t);
       const res = await fetch(`/api/orders?${params.toString()}`);
       const data = await res.json();
       if (data.orders) setOrders(data.orders);
@@ -67,13 +89,29 @@ export default function AdminOrders() {
     } catch {}
   }, [dateFrom, dateTo]);
 
-  useEffect(() => { fetchOrders(); const i = setInterval(fetchOrders, 8000); return () => clearInterval(i); }, [fetchOrders]);
+  useEffect(() => { fetchOrders(); const i = setInterval(() => fetchOrders(), 8000); return () => clearInterval(i); }, [fetchOrders]);
+
+  const handleFilter = () => fetchOrders();
 
   const handleExport = () => {
+    const filters: string[] = [];
+    if (reportFilters.total) filters.push("total");
+    if (reportFilters.entregados) filters.push("entregados");
+    if (reportFilters.cancelados) filters.push("cancelados");
+    if (reportFilters.efectivo) filters.push("efectivo");
+    if (reportFilters.tarjeta) filters.push("tarjeta");
+    if (reportFilters.transferencia) filters.push("transferencia");
+    if (reportFilters.paypal) filters.push("paypal");
+    if (reportFilters.nombre) filters.push("nombre");
+    if (reportFilters.numero) filters.push("numero");
+    if (reportFilters.notas) filters.push("notas");
+
     const params = new URLSearchParams();
-    if (dateFrom) params.set("from", dateFrom);
-    if (dateTo) params.set("to", dateTo);
+    if (reportFrom) params.set("from", reportFrom);
+    if (reportTo) params.set("to", reportTo);
+    if (filters.length > 0) params.set("filters", filters.join(","));
     window.open(`/api/orders/export?${params.toString()}`, "_blank");
+    setShowReport(false);
   };
 
   const changeStatus = async (orderId: number, status: string) => {
@@ -133,9 +171,9 @@ export default function AdminOrders() {
 
   const statCards = [
     { label: "Total Pedidos", value: stats.total, color: "text-[var(--admin-accent)]", bg: "bg-[var(--admin-accent)]/6", border: "border-[var(--admin-accent)]/20" },
-    { label: "Hoy", value: stats.hoy, color: "text-emerald-400", bg: "bg-emerald-500/[0.06]", border: "border-emerald-500/20" },
-    { label: "Pendientes", value: stats.pendientes, color: "text-amber-400", bg: "bg-amber-500/[0.06]", border: "border-amber-500/20" },
-    { label: "Ingresos Hoy", value: `$${(stats.ingresos_hoy || 0).toFixed(0)}`, color: "text-sky-400", bg: "bg-sky-500/[0.06]", border: "border-sky-500/20" },
+    { label: "Hoy", value: stats.hoy, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-500/[0.06]", border: "border-emerald-300 dark:border-emerald-500/20" },
+    { label: "Pendientes", value: stats.pendientes, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-500/[0.06]", border: "border-amber-300 dark:border-amber-500/20" },
+    { label: "Ingresos Hoy", value: `$${(stats.ingresos_hoy || 0).toFixed(0)}`, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-100 dark:bg-sky-500/[0.06]", border: "border-sky-300 dark:border-sky-500/20" },
   ];
 
   const renderListRow = (o: any) => {
@@ -161,9 +199,9 @@ export default function AdminOrders() {
           </svg>
           {o.phone || "\u2014"}
         </span>
-        <span className={`text-[10px] px-2 py-1 rounded-full border shrink-0 ${s.cls}`}>{s.label}</span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${s.cls}`}>{s.label}</span>
         {ps && (
-          <span className={`text-[10px] px-2 py-1 rounded-full border shrink-0 ${ps.cls}`}>{ps.label}</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span>
         )}
         <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
         <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
@@ -210,11 +248,15 @@ export default function AdminOrders() {
             <span className="text-[9px] text-[var(--admin-text-muted)] bg-[var(--admin-bg)] px-1.5 py-0.5 rounded">{o.payment_method}</span>
           )}
           {ps && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${ps.cls}`}>{ps.label}</span>
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-medium ${ps.cls}`}>{ps.label}</span>
           )}
         </div>
       </div>
     );
+  };
+
+  const toggleFilter = (key: keyof typeof reportFilters) => {
+    setReportFilters(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -226,7 +268,6 @@ export default function AdminOrders() {
           className="md:hidden mb-4 w-10 h-10 rounded-xl bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] flex items-center justify-center text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] transition-colors">
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-semibold text-[var(--admin-text)]">Pedidos</h1>
@@ -236,16 +277,14 @@ export default function AdminOrders() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Export */}
-            <button onClick={handleExport}
-              className="flex items-center gap-1.5 px-3 py-2 text-[11px] bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] text-[var(--admin-text-secondary)] rounded-xl hover:border-[var(--admin-accent)]/30 hover:text-[var(--admin-accent)] transition-all">
+            <button onClick={() => setShowReport(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-[11px] bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-500/20 transition-all font-medium">
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Exportar Excel
+              Generar Reporte
             </button>
 
-            {/* View toggle */}
             <div className="flex bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] rounded-xl p-1">
               <button onClick={() => setViewMode("list")}
                 className={`px-3 py-1.5 text-[11px] rounded-lg transition-all ${viewMode === "list" ? "bg-[var(--admin-accent)] text-white font-medium" : "text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)]"}`}>
@@ -270,14 +309,17 @@ export default function AdminOrders() {
           <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider shrink-0">Hasta</label>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={today}
             className="px-3 py-1.5 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
-          <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0">max 2 meses</span>
+          <button onClick={handleFilter}
+            className="px-4 py-1.5 bg-[var(--admin-accent)] text-white text-xs rounded-lg hover:bg-[var(--admin-accent-hover)] font-medium transition-all">
+            Filtrar
+          </button>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
           {statCards.map(c => (
             <div key={c.label} className={`p-4 rounded-2xl border ${c.border} ${c.bg}`}>
-              <p className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider mb-1">{c.label}</p>
+              <p className="text-[10px] font-semibold text-[var(--admin-text)] uppercase tracking-wider mb-1">{c.label}</p>
               <p className={`text-2xl font-bold ${c.color}`}>{c.value}</p>
             </div>
           ))}
@@ -305,11 +347,11 @@ export default function AdminOrders() {
                   const cols = sortedOrders.filter(o => o.status === status);
                   return (
                     <div key={status} className="space-y-2">
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${st.cls}`}>
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border font-medium ${st.cls}`}>
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={st.icon} />
                         </svg>
-                        <span className="text-[11px] font-medium">{st.label}</span>
+                        <span className="text-[11px]">{st.label}</span>
                         <span className="text-[10px] opacity-60 ml-auto">{cols.length}</span>
                       </div>
                       <div
@@ -364,22 +406,22 @@ export default function AdminOrders() {
 
                 <div className="p-5 space-y-4">
                   <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
-                    <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1">Cliente</p>
+                    <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Cliente</p>
                     <p className="text-[var(--admin-text)] font-medium text-sm">{selected.phone || "Sin telefono"}</p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
-                    <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1">Fecha y Hora</p>
+                    <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Fecha y Hora</p>
                     <p className="text-[var(--admin-text)] text-sm">{formatDate(selected.created_at)}</p>
                   </div>
 
                   <div>
-                    <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2">Productos</p>
+                    <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Productos</p>
                     <div className="space-y-1.5">
                       {selected.items?.map((i: any, idx: number) => (
                         <div key={idx} className="flex justify-between items-center py-1.5 px-3 rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-border)]">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] text-[var(--admin-text-muted)] bg-[var(--admin-bg-tertiary)] px-1.5 py-0.5 rounded">{i.quantity}x</span>
+                            <span className="text-[10px] text-[var(--admin-text-muted)] bg-[var(--admin-bg-tertiary)] px-1.5 py-0.5 rounded font-medium">{i.quantity}x</span>
                             <span className="text-sm text-[var(--admin-text)]">{i.name}</span>
                           </div>
                           <span className="text-xs text-[var(--admin-text-secondary)]">${(Number(i.price) * i.quantity).toFixed(0)}</span>
@@ -395,10 +437,10 @@ export default function AdminOrders() {
 
                   {selected.mp_payment_id && (
                     <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
-                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1">Pago Mercado Pago</p>
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Pago Mercado Pago</p>
                       <p className="text-[11px] text-[var(--admin-text-secondary)] font-mono">{selected.mp_payment_id}</p>
                       {selected.payment_status && PAYMENT_STATUS[selected.payment_status] && (
-                        <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full border ${PAYMENT_STATUS[selected.payment_status].cls}`}>
+                        <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full border font-medium ${PAYMENT_STATUS[selected.payment_status].cls}`}>
                           {PAYMENT_STATUS[selected.payment_status].label}
                         </span>
                       )}
@@ -406,7 +448,7 @@ export default function AdminOrders() {
                   )}
 
                   <div className="border-t border-[var(--admin-border)] pt-3">
-                    <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3">Cambiar estado</p>
+                    <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Cambiar estado</p>
                     <div className="space-y-1.5">
                       {STATUS_ORDER.map(s => {
                         const st = STATUS[s];
@@ -428,7 +470,7 @@ export default function AdminOrders() {
 
                   {selected.notes && (
                     <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
-                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1">Notas</p>
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Notas</p>
                       <p className="text-xs text-[var(--admin-text-secondary)]">{selected.notes}</p>
                     </div>
                   )}
@@ -438,6 +480,111 @@ export default function AdminOrders() {
           )}
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReport && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setShowReport(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-[var(--admin-bg)] rounded-2xl w-full max-w-lg shadow-2xl border border-[var(--admin-border)] overflow-hidden animate-scale-in">
+              <div className="p-5 border-b border-[var(--admin-border)] flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-[var(--admin-text)]">Generar Reporte</h2>
+                <button onClick={() => setShowReport(false)} className="p-1.5 rounded-xl hover:bg-[var(--admin-bg-hover)]">
+                  <svg className="w-5 h-5 text-[var(--admin-text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+                {/* Date range */}
+                <div>
+                  <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Rango de fechas</p>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-[var(--admin-text-muted)]">Desde</label>
+                      <input type="date" value={reportFrom} onChange={e => setReportFrom(e.target.value)} max={reportTo}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] text-[var(--admin-text-muted)]">Hasta</label>
+                      <input type="date" value={reportTo} onChange={e => setReportTo(e.target.value)} min={reportFrom} max={today}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order filters */}
+                <div>
+                  <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Tipos de pedido</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: "total", label: "Pedidos Totales" },
+                      { key: "entregados", label: "Entregados" },
+                      { key: "cancelados", label: "Cancelados" },
+                    ].map(f => (
+                      <label key={f.key} className="flex items-center gap-2 py-2 px-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] cursor-pointer hover:border-[var(--admin-accent)]/30 transition-all">
+                        <input type="checkbox" checked={(reportFilters as any)[f.key]} onChange={() => toggleFilter(f.key as any)}
+                          className="w-3.5 h-3.5 rounded accent-[var(--admin-accent)]" />
+                        <span className="text-[11px] text-[var(--admin-text)]">{f.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Payment type filters */}
+                <div>
+                  <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Tipos de pago</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { key: "efectivo", label: "Efectivo" },
+                      { key: "tarjeta", label: "Tarjeta" },
+                      { key: "transferencia", label: "Transferencia" },
+                      { key: "paypal", label: "PayPal" },
+                    ].map(f => (
+                      <label key={f.key} className="flex items-center gap-2 py-2 px-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] cursor-pointer hover:border-[var(--admin-accent)]/30 transition-all">
+                        <input type="checkbox" checked={(reportFilters as any)[f.key]} onChange={() => toggleFilter(f.key as any)}
+                          className="w-3.5 h-3.5 rounded accent-[var(--admin-accent)]" />
+                        <span className="text-[11px] text-[var(--admin-text)]">{f.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Client data filters */}
+                <div>
+                  <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Datos del cliente</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { key: "nombre", label: "Nombre" },
+                      { key: "numero", label: "Numero" },
+                      { key: "notas", label: "Notas" },
+                    ].map(f => (
+                      <label key={f.key} className="flex items-center gap-2 py-2 px-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] cursor-pointer hover:border-[var(--admin-accent)]/30 transition-all">
+                        <input type="checkbox" checked={(reportFilters as any)[f.key]} onChange={() => toggleFilter(f.key as any)}
+                          className="w-3.5 h-3.5 rounded accent-[var(--admin-accent)]" />
+                        <span className="text-[11px] text-[var(--admin-text)]">{f.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 border-t border-[var(--admin-border)] flex gap-3">
+                <button onClick={() => setShowReport(false)}
+                  className="flex-1 py-2.5 border border-[var(--admin-border)] text-sm text-[var(--admin-text-secondary)] rounded-xl hover:bg-[var(--admin-bg-hover)] transition-all font-medium">
+                  Cancelar
+                </button>
+                <button onClick={handleExport}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-xl font-semibold flex items-center justify-center gap-2 transition-all">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Descargar Excel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
