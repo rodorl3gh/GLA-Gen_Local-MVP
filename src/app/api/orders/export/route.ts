@@ -11,8 +11,18 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
   const now = Math.floor(Date.now() / 1000);
-  const fromTs = from ? Math.floor(new Date(from).getTime() / 1000) : now - 30 * 86400;
-  const toTs = to ? Math.floor(new Date(to).getTime() / 1000) + 86400 : now;
+
+  let fromTs = now - 30 * 86400;
+  if (from) {
+    const [fy, fm, fd] = from.split("-").map(Number);
+    fromTs = Math.floor(new Date(fy, fm - 1, fd).getTime() / 1000);
+  }
+
+  let toTs = now;
+  if (to) {
+    const [ty, tm, td] = to.split("-").map(Number);
+    toTs = Math.floor(new Date(ty, tm - 1, td, 23, 59, 59).getTime() / 1000);
+  }
 
   let orders = db
     .prepare(`SELECT * FROM orders WHERE created_at >= ? AND created_at <= ? ORDER BY created_at ASC`)

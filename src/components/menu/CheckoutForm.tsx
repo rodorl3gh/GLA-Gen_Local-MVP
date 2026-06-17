@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { CartItem } from "@/app/menu/page";
 
 interface Props {
@@ -53,7 +53,10 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const brickContainerRef = useRef<HTMLDivElement>(null);
 
   const isMpCard = payment === "Tarjeta";
-  const selectedMethod = paymentMethods.find(m => m.name === payment);
+  const selectedMethod = useMemo(() =>
+    paymentMethods.find(m => m.name === payment) || null,
+    [paymentMethods, payment]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -355,12 +358,12 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                           <div className="flex justify-between"><span className="text-[var(--brand-text-muted)]">Pago</span><span className="text-[var(--brand-text)] font-medium">{payment}</span></div>
                         </div>
 
-                        {selectedMethod && selectedMethod.details.length > 0 && (
-                          <div className="border-t border-dashed border-[var(--brand-border)] pt-2 mb-3">
-                            <p className="text-[10px] text-[var(--brand-text-muted)] uppercase mb-1.5 font-semibold">Datos de pago</p>
-                            <div className="space-y-1">
+                        {selectedMethod && selectedMethod.details && selectedMethod.details.length > 0 && (
+                          <div className="border-t border-dashed border-[var(--brand-border)] pt-3 mb-3">
+                            <p className="text-[10px] text-[var(--brand-text-muted)] uppercase mb-2 font-bold tracking-wider">Datos de pago</p>
+                            <div className="space-y-2 bg-gray-100 rounded-xl p-3">
                               {selectedMethod.details.map((d, i) => (
-                                <p key={i} className="text-[11px] text-[var(--brand-text-secondary)] break-all">{d}</p>
+                                <p key={i} className="text-[12px] text-gray-800 font-medium break-all">{d}</p>
                               ))}
                             </div>
                           </div>

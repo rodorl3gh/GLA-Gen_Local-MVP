@@ -195,7 +195,7 @@ function seedPaymentMethods(db: Database.Database) {
   const methods = [
     { name: "Efectivo", enabled: 1, details: JSON.stringify(["Pago directamente en nuestra sucursal al recibir tu pedido."]) },
     { name: "Tarjeta", enabled: 1, details: JSON.stringify(["Paga con tarjeta de credito o debito via Mercado Pago."]) },
-    { name: "Transferencia", enabled: 1, details: JSON.stringify(["Transfiere via SPEI con referencia unica generada por Mercado Pago."]) },
+    { name: "Transferencia", enabled: 1, details: JSON.stringify(["Banco: BBVA", "Cuenta: 0123456789", "CLABE: 012345678901234567", "Titular: Cafeteria Luna Test"]) },
   ];
 
   const stmt = db.prepare(

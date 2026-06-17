@@ -13,22 +13,54 @@ interface PaymentMethod {
 const METHOD_TYPES = ["Efectivo", "Tarjeta", "Transferencia", "PayPal"];
 const SINGLE_ONLY = ["Efectivo", "Tarjeta"];
 
+function parseDetail(details: string[], key: string): string {
+  const line = details.find(d => d.toLowerCase().startsWith(key.toLowerCase()));
+  if (!line) return "";
+  const idx = line.indexOf(":");
+  return idx > -1 ? line.slice(idx + 1).trim() : line;
+}
+
+function buildDetails(name: string, fields: Record<string, string>): string[] {
+  if (name === "Transferencia") {
+    const d: string[] = [];
+    if (fields.banco) d.push(`Banco: ${fields.banco}`);
+    if (fields.cuenta) d.push(`Cuenta: ${fields.cuenta}`);
+    if (fields.clabe) d.push(`CLABE: ${fields.clabe}`);
+    if (fields.titular) d.push(`Titular: ${fields.titular}`);
+    return d;
+  }
+  if (name === "PayPal") {
+    return fields.correo ? [`Correo PayPal: ${fields.correo}`] : [];
+  }
+  return fields.texto ? fields.texto.split("\n").map(l => l.trim()).filter(Boolean) : [];
+}
+
 export default function AdminPayments() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
 
-  // Edit state
+  // Edit structured fields
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
-  const [editDetails, setEditDetails] = useState("");
+  const [editBanco, setEditBanco] = useState("");
+  const [editCuenta, setEditCuenta] = useState("");
+  const [editClabe, setEditClabe] = useState("");
+  const [editTitular, setEditTitular] = useState("");
+  const [editCorreo, setEditCorreo] = useState("");
+  const [editTexto, setEditTexto] = useState("");
   const [editError, setEditError] = useState("");
 
   // New method modal
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("Transferencia");
-  const [newDetails, setNewDetails] = useState("");
+  const [newBanco, setNewBanco] = useState("");
+  const [newCuenta, setNewCuenta] = useState("");
+  const [newClabe, setNewClabe] = useState("");
+  const [newTitular, setNewTitular] = useState("");
+  const [newCorreo, setNewCorreo] = useState("");
+  const [newTexto, setNewTexto] = useState("");
   const [newError, setNewError] = useState("");
 
   const fetchMethods = async () => {
@@ -55,15 +87,20 @@ export default function AdminPayments() {
   const startEdit = (m: PaymentMethod) => {
     setEditId(m.id);
     setEditName(m.name);
-    setEditDetails(m.details.join("\n"));
+    setEditBanco(parseDetail(m.details, "Banco"));
+    setEditCuenta(parseDetail(m.details, "Cuenta"));
+    setEditClabe(parseDetail(m.details, "CLABE"));
+    setEditTitular(parseDetail(m.details, "Titular"));
+    setEditCorreo(parseDetail(m.details, "Correo PayPal"));
+    setEditTexto(m.details.join("\n"));
     setEditError("");
   };
 
   const cancelEdit = () => {
     setEditId(null);
     setEditName("");
-    setEditDetails("");
-    setEditError("");
+    setEditBanco(""); setEditCuenta(""); setEditClabe(""); setEditTitular("");
+    setEditCorreo(""); setEditTexto(""); setEditError("");
   };
 
   const saveEdit = async () => {
@@ -75,7 +112,6 @@ export default function AdminPayments() {
       return;
     }
 
-    // Check single-only restriction
     if (SINGLE_ONLY.includes(editName.trim())) {
       const existing = methods.find(m => m.name === editName.trim() && m.id !== editId);
       if (existing) {
@@ -84,10 +120,10 @@ export default function AdminPayments() {
       }
     }
 
-    const detailsArray = editDetails
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
+    const detailsArray = buildDetails(editName.trim(), {
+      banco: editBanco, cuenta: editCuenta, clabe: editClabe, titular: editTitular,
+      correo: editCorreo, texto: editTexto,
+    });
 
     await fetch("/api/payments", {
       method: "PUT",
@@ -107,8 +143,8 @@ export default function AdminPayments() {
 
   const openNewModal = () => {
     setNewName("Transferencia");
-    setNewDetails("");
-    setNewError("");
+    setNewBanco(""); setNewCuenta(""); setNewClabe(""); setNewTitular("");
+    setNewCorreo(""); setNewTexto(""); setNewError("");
     setShowNew(true);
   };
 
@@ -124,7 +160,11 @@ export default function AdminPayments() {
       }
     }
 
-    const detailsArray = newDetails.split("\n").map(l => l.trim()).filter(Boolean);
+    const detailsArray = buildDetails(newName.trim(), {
+      banco: newBanco, cuenta: newCuenta, clabe: newClabe, titular: newTitular,
+      correo: newCorreo, texto: newTexto,
+    });
+
     const res = await fetch("/api/payments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -139,6 +179,51 @@ export default function AdminPayments() {
     } else {
       setNewError(data.error || "Error al crear");
     }
+  };
+
+  const renderFields = (
+    prefix: string,
+    state: { banco: string; cuenta: string; clabe: string; titular: string; correo: string; texto: string },
+    setters: { banco: (v: string) => void; cuenta: (v: string) => void; clabe: (v: string) => void; titular: (v: string) => void; correo: (v: string) => void; texto: (v: string) => void },
+    methodName: string
+  ) => {
+    if (methodName === "Transferencia") {
+      return (
+        <div className="space-y-3">
+          {[
+            { label: "Banco", value: state.banco, set: setters.banco, placeholder: "BBVA" },
+            { label: "Numero de Cuenta", value: state.cuenta, set: setters.cuenta, placeholder: "0123456789" },
+            { label: "CLABE Interbancaria", value: state.clabe, set: setters.clabe, placeholder: "012345678901234567" },
+            { label: "Titular de la Cuenta", value: state.titular, set: setters.titular, placeholder: "Mi Negocio S.A. de C.V." },
+          ].map(f => (
+            <div key={f.label}>
+              <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">{f.label}</label>
+              <input type="text" value={f.value} onChange={e => f.set(e.target.value)}
+                placeholder={f.placeholder}
+                className="w-full mt-1 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all" />
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (methodName === "PayPal") {
+      return (
+        <div>
+          <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Correo de PayPal</label>
+          <input type="email" value={state.correo} onChange={e => setters.correo(e.target.value)}
+            placeholder="pagos@minegocio.com"
+            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all" />
+        </div>
+      );
+    }
+    return (
+      <div>
+        <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Detalles (uno por linea)</label>
+        <textarea value={state.texto} onChange={e => setters.texto(e.target.value)} rows={3}
+          placeholder="Detalles adicionales..."
+          className="w-full mt-1 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
+      </div>
+    );
   };
 
   const getIcon = (name: string) => {
@@ -207,17 +292,15 @@ export default function AdminPayments() {
                     <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Tipo de metodo</label>
                     <select value={editName} onChange={(e) => setEditName(e.target.value)}
                       className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all">
-                      {METHOD_TYPES.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
+                      {METHOD_TYPES.map(t => (<option key={t} value={t}>{t}</option>))}
                     </select>
                   </div>
-                  <div>
-                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Detalles (uno por linea)</label>
-                    <textarea value={editDetails} onChange={(e) => setEditDetails(e.target.value)} rows={4}
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
-                    <p className="text-[10px] text-[var(--admin-placeholder)] mt-1">Cada linea sera un dato (ej: Banco: BBVA, Cuenta: XXX)</p>
-                  </div>
+
+                  {renderFields("edit", { banco: editBanco, cuenta: editCuenta, clabe: editClabe, titular: editTitular, correo: editCorreo, texto: editTexto },
+                    { banco: setEditBanco, cuenta: setEditCuenta, clabe: setEditClabe, titular: setEditTitular, correo: setEditCorreo, texto: setEditTexto },
+                    editName
+                  )}
+
                   {editError && <p className="text-red-500 text-xs">{editError}</p>}
                   <div className="flex items-center gap-2">
                     <button onClick={saveEdit} className="px-4 py-2 bg-[var(--admin-accent)] text-white text-xs rounded-xl hover:bg-[var(--admin-accent-hover)] font-medium transition-all">Guardar</button>
@@ -285,24 +368,22 @@ export default function AdminPayments() {
                     <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Tipo de metodo *</label>
                     <select value={newName} onChange={(e) => setNewName(e.target.value)}
                       className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all">
-                      {METHOD_TYPES.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
+                      {METHOD_TYPES.map(t => (<option key={t} value={t}>{t}</option>))}
                     </select>
                     {SINGLE_ONLY.includes(newName) && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">Solo se permite un metodo de este tipo.</p>
                     )}
                   </div>
-                  <div>
-                    <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider font-semibold">Detalles (uno por linea)</label>
-                    <textarea value={newDetails} onChange={(e) => setNewDetails(e.target.value)} rows={3}
-                      placeholder={newName === "Transferencia" ? "Banco: BBVA\nCuenta: 0123456789\nCLABE: 012345678901234567\nTitular: Mi Negocio" : newName === "PayPal" ? "Correo PayPal: pagos@minegocio.com" : "Detalles adicionales..."}
-                      className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 focus:ring-1 focus:ring-[var(--admin-accent)]/20 transition-all resize-none" />
-                  </div>
+
+                  {renderFields("new", { banco: newBanco, cuenta: newCuenta, clabe: newClabe, titular: newTitular, correo: newCorreo, texto: newTexto },
+                    { banco: setNewBanco, cuenta: setNewCuenta, clabe: setNewClabe, titular: setNewTitular, correo: setNewCorreo, texto: setNewTexto },
+                    newName
+                  )}
+
                   {newError && <p className="text-red-500 text-xs">{newError}</p>}
                 </div>
                 <div className="p-5 border-t border-[var(--admin-border)] flex gap-3">
-                  <button onClick={() => { setShowNew(false); setNewName("Transferencia"); setNewDetails(""); setNewError(""); }}
+                  <button onClick={() => { setShowNew(false); }}
                     className="flex-1 py-2.5 border border-[var(--admin-border)] text-sm text-[var(--admin-text-secondary)] rounded-xl hover:bg-[var(--admin-bg-hover)] transition-all font-medium">
                     Cancelar
                   </button>
