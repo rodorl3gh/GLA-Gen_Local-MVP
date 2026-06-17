@@ -20,10 +20,10 @@ export async function PATCH(
 ) {
   const { orderId } = await params;
   const { status } = (await req.json()) as {
-    status: "pending" | "preparing" | "delivered" | "cancelled";
+    status: "pending" | "preparing" | "delivered" | "cancelled" | "expirado";
   };
 
-  if (!["pending", "preparing", "delivered", "cancelled"].includes(status)) {
+  if (!["pending", "preparing", "delivered", "cancelled", "expirado"].includes(status)) {
     return NextResponse.json({ error: "Estado invalido" }, { status: 400 });
   }
 

@@ -81,6 +81,7 @@ export default function AdminDashboard() {
     preparing: "bg-sky-200 text-sky-800 dark:bg-sky-500/20 dark:text-sky-400",
     delivered: "bg-emerald-200 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400",
     cancelled: "bg-red-200 text-red-800 dark:bg-red-500/20 dark:text-red-400",
+    expirado: "bg-gray-200 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400",
   };
 
   return (
@@ -156,7 +157,7 @@ export default function AdminDashboard() {
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-medium text-[var(--admin-accent)]">${Number(o.total).toFixed(0)}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[o.status] || "bg-gray-200 text-gray-700 dark:bg-gray-500/15 dark:text-gray-400"}`}>
-                        {o.status === "pending" ? "Pendiente" : o.status === "preparing" ? "Preparando" : o.status === "delivered" ? "Entregado" : o.status}
+                        {o.status === "pending" ? "Pendiente" : o.status === "preparing" ? "Preparando" : o.status === "delivered" ? "Entregado" : o.status === "expirado" ? "Expirado" : o.status}
                       </span>
                     </div>
                   </a>

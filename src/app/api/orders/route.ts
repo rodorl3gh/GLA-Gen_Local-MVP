@@ -8,9 +8,15 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to");
 
   const now = Math.floor(Date.now() / 1000);
+  const twentyFourHoursAgo = now - 86400;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayStartTs = Math.floor(todayStart.getTime() / 1000);
+
+  // Auto-expire orders older than 24h that are still pending/preparing
+  db.prepare(
+    `UPDATE orders SET status = 'expirado' WHERE status IN ('pending','preparing') AND created_at < ?`
+  ).run(twentyFourHoursAgo);
 
   let fromTs = todayStartTs;
   if (from) {

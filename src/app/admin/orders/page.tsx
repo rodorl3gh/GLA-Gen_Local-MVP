@@ -9,6 +9,7 @@ const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
   pending:    { label: "Pendiente", cls: "bg-amber-200 text-amber-800 dark:bg-amber-500/20 dark:text-amber-400 border-amber-300 dark:border-amber-500/30", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
   preparing:  { label: "Preparando", cls: "bg-sky-200 text-sky-800 dark:bg-sky-500/20 dark:text-sky-400 border-sky-300 dark:border-sky-500/30", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
   delivered:  { label: "Entregado", cls: "bg-emerald-200 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-300 dark:border-emerald-500/30", icon: "M5 13l4 4L19 7" },
+  expirado:   { label: "Expirado", cls: "bg-gray-300 text-gray-700 dark:bg-gray-500/20 dark:text-gray-400 border-gray-400 dark:border-gray-500/30", icon: "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
   cancelled:  { label: "Cancelado", cls: "bg-red-200 text-red-800 dark:bg-red-500/20 dark:text-red-400 border-red-300 dark:border-red-500/30", icon: "M6 18L18 6M6 6l12 12" },
 };
 
@@ -19,7 +20,7 @@ const PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
   refunded:  { label: "Reembolsado", cls: "bg-purple-200 text-purple-800 dark:bg-purple-500/15 dark:text-purple-400 border-purple-300 dark:border-purple-500/20" },
 };
 
-const STATUS_ORDER = ["pending", "preparing", "delivered", "cancelled"];
+const STATUS_ORDER = ["pending", "preparing", "delivered", "expirado", "cancelled"];
 
 function timeAgo(isoString: string): string {
   if (!isoString) return "";
@@ -65,6 +66,7 @@ export default function AdminOrders() {
   const [reportFilters, setReportFilters] = useState({
     total: true,
     entregados: true,
+    expirados: true,
     cancelados: true,
     efectivo: true,
     tarjeta: true,
@@ -97,6 +99,7 @@ export default function AdminOrders() {
     const filters: string[] = [];
     if (reportFilters.total) filters.push("total");
     if (reportFilters.entregados) filters.push("entregados");
+    if (reportFilters.expirados) filters.push("expirados");
     if (reportFilters.cancelados) filters.push("cancelados");
     if (reportFilters.efectivo) filters.push("efectivo");
     if (reportFilters.tarjeta) filters.push("tarjeta");
@@ -278,7 +281,7 @@ export default function AdminOrders() {
 
           <div className="flex items-center gap-3">
             <button onClick={() => setShowReport(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-[11px] bg-emerald-100 dark:bg-emerald-500/10 border border-emerald-300 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-500/20 transition-all font-medium">
+              className="flex items-center gap-1.5 px-4 py-2 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-semibold">
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -516,10 +519,11 @@ export default function AdminOrders() {
                 {/* Order filters */}
                 <div>
                   <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Tipos de pedido</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {[
                       { key: "total", label: "Pedidos Totales" },
                       { key: "entregados", label: "Entregados" },
+                      { key: "expirados", label: "Expirados" },
                       { key: "cancelados", label: "Cancelados" },
                     ].map(f => (
                       <label key={f.key} className="flex items-center gap-2 py-2 px-3 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-bg)] cursor-pointer hover:border-[var(--admin-accent)]/30 transition-all">

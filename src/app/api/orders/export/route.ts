@@ -35,20 +35,21 @@ export async function GET(req: NextRequest) {
   // Apply status filters
   if (activeFilters.length > 0) {
     const hasEntregados = activeFilters.includes("entregados");
+    const hasExpirados = activeFilters.includes("expirados");
     const hasCancelados = activeFilters.includes("cancelados");
     const hasTotal = activeFilters.includes("total");
 
-    if (hasEntregados && !hasCancelados) {
-      orders = orders.filter((o: any) => o.status === "delivered");
-    } else if (!hasEntregados && hasCancelados) {
-      orders = orders.filter((o: any) => o.status === "cancelled");
-    } else if (!hasEntregados && !hasCancelados && !hasTotal) {
-      orders = orders.filter((o: any) => o.status === "delivered" || o.status === "cancelled");
+    const statuses: string[] = [];
+    if (hasEntregados || hasTotal) statuses.push("delivered");
+    if (hasExpirados || hasTotal) statuses.push("expirado");
+    if (hasCancelados || hasTotal) statuses.push("cancelled");
+
+    if (statuses.length > 0) {
+      const placeholders = statuses.map(() => "?").join(",");
+      orders = orders.filter((o: any) => statuses.includes(o.status));
     }
-    // if both or total is checked, include all
   } else {
-    // Default: delivered + cancelled
-    orders = orders.filter((o: any) => o.status === "delivered" || o.status === "cancelled");
+    orders = orders.filter((o: any) => o.status === "delivered" || o.status === "expirado" || o.status === "cancelled");
   }
 
   // Apply payment type filters
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
   const showNumero = activeFilters.includes("numero");
   const showNotas = activeFilters.includes("notas");
 
-  const statusLabel: Record<string, string> = { delivered: "Entregado", cancelled: "Cancelado" };
+  const statusLabel: Record<string, string> = { delivered: "Entregado", cancelled: "Cancelado", expirado: "Expirado" };
   const BOM = "\uFEFF";
 
   // Build header dynamically

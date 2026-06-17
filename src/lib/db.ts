@@ -66,7 +66,7 @@ function runMigrations(db: Database.Database) {
       items TEXT NOT NULL DEFAULT '[]',
       total REAL NOT NULL DEFAULT 0,
       payment_method TEXT DEFAULT '',
-      status TEXT CHECK(status IN ('pending','preparing','delivered','cancelled')) NOT NULL DEFAULT 'pending',
+      status TEXT CHECK(status IN ('pending','preparing','delivered','cancelled','expirado')) NOT NULL DEFAULT 'pending',
       notes TEXT DEFAULT '',
       mp_payment_id TEXT DEFAULT '',
       payment_status TEXT DEFAULT 'pending',
@@ -516,7 +516,7 @@ export function getOrderById(id: number): any {
   return { ...order, items: JSON.parse(order.items || "[]") };
 }
 
-export function updateOrderStatus(id: number, status: "pending" | "preparing" | "delivered" | "cancelled") {
+export function updateOrderStatus(id: number, status: "pending" | "preparing" | "delivered" | "cancelled" | "expirado") {
   getDb().prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
 }
 
