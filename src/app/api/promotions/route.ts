@@ -8,7 +8,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, description, price, type, details } = body;
+    const { name, description, price, type, details, config } = body;
 
     if (!name || !type) {
       return NextResponse.json({ error: "Nombre y tipo requeridos" }, { status: 400 });
@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
       type: type === "package" ? "package" : "promotion",
       imagePath: body.image_path || "",
       details: Array.isArray(details) ? details : [],
+      config: config || {},
     });
 
     return NextResponse.json({ success: true, id });

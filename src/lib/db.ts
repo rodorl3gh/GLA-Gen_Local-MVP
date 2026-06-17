@@ -127,6 +127,7 @@ function runMigrations(db: Database.Database) {
       type TEXT CHECK(type IN ('promotion','package')) NOT NULL DEFAULT 'promotion',
       active INTEGER NOT NULL DEFAULT 1,
       details TEXT DEFAULT '[]',
+      config TEXT DEFAULT '{}',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
@@ -134,6 +135,9 @@ function runMigrations(db: Database.Database) {
 
   // Ensure UNIQUE index on payment_methods.name (for existing DBs created before UNIQUE was added)
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_methods_name ON payment_methods(name);`);
+
+  // Migration: add config column if not exists (for DBs created before this migration)
+  try { db.exec(`ALTER TABLE promotions ADD COLUMN config TEXT DEFAULT '{}'`); } catch {}
 
   seedDefaults(db);
 }
@@ -213,18 +217,60 @@ function seedCatalog(db: Database.Database) {
 function seedPromotions(db: Database.Database) {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_promotions_name_type ON promotions(name, type);`);
   const promos = [
-    ["2x1 en Bebidas Calientes", "Llevate dos bebidas calientes por el precio de una. Valido de lunes a viernes.", 55, "promotion", "/uploads/catalog/promo_2x1_bebidas.png", JSON.stringify(["Valido lunes a viernes", "Aplica en: Americano, Latte, Cappuccino, Mocha, Chai Latte"])],
-    ["3x1 en Panaderia", "Compra dos piezas de panaderia y llevate la tercera gratis. Perfecto para compartir.", 76, "promotion", "/uploads/catalog/promo_3x1_panaderia.png", JSON.stringify(["Valido todos los dias", "Aplica en: Croissant, Bagel, Muffin de Arandano", "Hasta agotar existencias"])],
-    ["Desayuno Completo", "Bebida caliente + pieza de panaderia a precio especial.", 75, "package", "/uploads/catalog/package_desayuno.png", JSON.stringify(["Incluye: 1 bebida caliente a elegir", "Incluye: 1 pieza de panaderia a elegir", "Ahorro de hasta $20"])],
-    ["Combo Amigos", "2 bebidas frias + 2 piezas de panaderia para compartir.", 120, "package", "/uploads/catalog/package_amigos.png", JSON.stringify(["Incluye: 2 Cold Brews", "Incluye: 2 Croissants", "Precio especial para compartir"])],
+    {
+      name: "2x1 en Bebidas Calientes",
+      description: "Llevate dos bebidas calientes por el precio de una. Valido de lunes a viernes.",
+      price: 55,
+      type: "promotion",
+      image_path: "/uploads/catalog/promo_2x1_bebidas.png",
+      details: JSON.stringify(["Valido lunes a viernes", "Elige 2 bebidas calientes y paga solo 1"]),
+      config: JSON.stringify({ pickCount: 2, payCount: 1, eligibleProductIds: [1, 2, 3, 4, 5] }),
+    },
+    {
+      name: "3x1 en Panaderia",
+      description: "Compra dos piezas de panaderia y llevate la tercera gratis.",
+      price: 76,
+      type: "promotion",
+      image_path: "/uploads/catalog/promo_3x1_panaderia.png",
+      details: JSON.stringify(["Valido todos los dias", "Elige 3 piezas y paga solo 2", "Hasta agotar existencias"]),
+      config: JSON.stringify({ pickCount: 3, payCount: 2, eligibleProductIds: [7, 8, 9] }),
+    },
+    {
+      name: "Desayuno Completo",
+      description: "Bebida caliente + pieza de panaderia a precio especial.",
+      price: 75,
+      type: "package",
+      image_path: "/uploads/catalog/package_desayuno.png",
+      details: JSON.stringify(["Ahorro de hasta $20"]),
+      config: JSON.stringify({
+        slots: [
+          { label: "Bebida Caliente", eligibleProductIds: [1, 2, 3, 4, 5], required: true },
+          { label: "Panaderia", eligibleProductIds: [7, 8, 9], required: true },
+        ],
+      }),
+    },
+    {
+      name: "Combo Amigos",
+      description: "2 bebidas + 2 piezas de panaderia para compartir.",
+      price: 120,
+      type: "package",
+      image_path: "/uploads/catalog/package_amigos.png",
+      details: JSON.stringify(["Precio especial para compartir"]),
+      config: JSON.stringify({
+        slots: [
+          { label: "Bebidas", eligibleProductIds: [6, 10], required: true, maxSelect: 2 },
+          { label: "Panaderia", eligibleProductIds: [7, 8, 9], required: true, maxSelect: 2 },
+        ],
+      }),
+    },
   ];
 
   const stmt = db.prepare(
-    "INSERT OR IGNORE INTO promotions (name, description, price, type, image_path, details) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT OR IGNORE INTO promotions (name, description, price, type, image_path, details, config) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
 
-  for (const [name, desc, price, type, img, details] of promos) {
-    stmt.run(name, desc, price, type, img, details);
+  for (const p of promos) {
+    stmt.run(p.name, p.description, p.price, p.type, p.image_path, p.details, p.config);
   }
 }
 
@@ -233,37 +279,39 @@ export function getPromotions(): any[] {
   return getDb()
     .prepare("SELECT * FROM promotions WHERE active = 1 ORDER BY type, id")
     .all()
-    .map((p: any) => ({ ...p, details: JSON.parse(p.details || "[]") }));
+    .map((p: any) => ({ ...p, details: JSON.parse(p.details || "[]"), config: JSON.parse(p.config || "{}") }));
 }
 
 export function getPromotionsAll(): any[] {
   return getDb()
     .prepare("SELECT * FROM promotions ORDER BY type, id")
     .all()
-    .map((p: any) => ({ ...p, details: JSON.parse(p.details || "[]") }));
+    .map((p: any) => ({ ...p, details: JSON.parse(p.details || "[]"), config: JSON.parse(p.config || "{}") }));
 }
 
 export function createPromotion(data: {
   name: string; description: string; price: number;
   type: "promotion" | "package"; imagePath: string; details: string[];
+  config: any;
 }): number {
   const db = getDb();
   const result = db.prepare(
-    "INSERT INTO promotions (name, description, price, type, image_path, details) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(data.name, data.description, data.price, data.type, data.imagePath, JSON.stringify(data.details));
+    "INSERT INTO promotions (name, description, price, type, image_path, details, config) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(data.name, data.description, data.price, data.type, data.imagePath, JSON.stringify(data.details), JSON.stringify(data.config || {}));
   return Number(result.lastInsertRowid);
 }
 
 export function updatePromotion(id: number, data: {
   name?: string; description?: string; price?: number;
   type?: string; imagePath?: string; details?: string[];
+  config?: any;
   active?: number;
 }) {
   const current = getDb().prepare("SELECT * FROM promotions WHERE id = ?").get(id) as any;
   if (!current) return;
 
   getDb().prepare(
-    "UPDATE promotions SET name=?, description=?, price=?, type=?, image_path=?, details=?, active=?, updated_at=unixepoch() WHERE id=?"
+    "UPDATE promotions SET name=?, description=?, price=?, type=?, image_path=?, details=?, config=?, active=?, updated_at=unixepoch() WHERE id=?"
   ).run(
     data.name ?? current.name,
     data.description ?? current.description,
@@ -271,6 +319,7 @@ export function updatePromotion(id: number, data: {
     data.type ?? current.type,
     data.imagePath ?? current.image_path,
     data.details ? JSON.stringify(data.details) : current.details,
+    data.config ? JSON.stringify(data.config) : current.config,
     data.active !== undefined ? data.active : current.active,
     id
   );

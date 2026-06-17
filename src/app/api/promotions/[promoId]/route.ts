@@ -16,6 +16,7 @@ export async function PUT(
       type: body.type,
       imagePath: body.image_path,
       details: body.details,
+      config: body.config,
       active: body.active !== undefined ? Number(body.active) : undefined,
     });
 

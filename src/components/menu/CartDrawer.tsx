@@ -53,27 +53,56 @@ export default function CartDrawer({ open, onClose, cart, onUpdateQuantity, tota
               {cart.map((item) => {
                 const imgUrl = getImageUrl(item.product);
                 return (
-                <div key={item.product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                  <div className="w-14 h-14 rounded-lg bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
-                    {imgUrl ? (
-                      <img src={imgUrl} alt="" className="w-full h-full object-cover rounded-lg" />
+                <div key={item.product.id} className={`${item.isPromo ? "border-[var(--brand-primary)]/30 bg-[var(--brand-primary)]/5" : "bg-gray-50 border border-transparent"} rounded-xl overflow-hidden`}>
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="w-14 h-14 rounded-lg bg-gray-200 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                      {imgUrl ? (
+                        <img src={imgUrl} alt="" className="w-full h-full object-cover rounded-lg" />
+                      ) : (
+                        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-[var(--brand-text)] truncate">{item.product.name}</p>
+                        {item.isPromo && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            item.product.category === "Promocion" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"
+                          }`}>
+                            {item.product.category}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[var(--brand-text-muted)]">${item.product.price.toFixed(0)}</p>
+                    </div>
+                    {!item.isPromo ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => onUpdateQuantity(item.product.id, -1)}
+                          className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm hover:bg-gray-100">-</button>
+                        <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
+                        <button onClick={() => onUpdateQuantity(item.product.id, 1)}
+                          className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm hover:bg-gray-100">+</button>
+                      </div>
                     ) : (
-                      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
-                      </svg>
+                      <button onClick={() => onUpdateQuantity(item.product.id, -1)}
+                        className="w-6 h-6 rounded-lg bg-red-100 text-red-500 flex items-center justify-center hover:bg-red-200 transition-colors">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--brand-text)] truncate">{item.product.name}</p>
-                    <p className="text-xs text-[var(--brand-text-muted)]">${item.product.price.toFixed(0)} c/u</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => onUpdateQuantity(item.product.id, -1)}
-                      className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm hover:bg-gray-100">-</button>
-                    <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
-                    <button onClick={() => onUpdateQuantity(item.product.id, 1)}
-                      className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm hover:bg-gray-100">+</button>
-                  </div>
+                  {item.isPromo && item.promoSubItems && item.promoSubItems.length > 0 && (
+                    <div className="px-3 pb-3 border-t border-[var(--brand-primary)]/10 pt-2">
+                      <p className="text-[10px] text-[var(--brand-text-muted)] uppercase tracking-wider mb-1">Incluye</p>
+                      {item.promoSubItems.map((sub, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 text-[11px] text-[var(--brand-text-secondary)] py-0.5">
+                          <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)] shrink-0" />
+                          {sub.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );})}
 

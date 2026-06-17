@@ -186,9 +186,15 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                       <div className="flex-1">
                         <span className="text-[var(--brand-text)] font-medium">{item.product.name}</span>
                         <span className="text-[var(--brand-text-muted)] ml-1">x{item.quantity}</span>
-                        <div className="text-[10px] text-[var(--brand-text-muted)]">
-                          ${item.product.price.toFixed(0)} c/u
-                        </div>
+                        {item.isPromo && item.promoSubItems && (
+                          <div className="mt-1">
+                            {item.promoSubItems.map((sub: any, si: number) => (
+                              <div key={si} className="flex items-center gap-1 text-[10px] text-[var(--brand-text-muted)]">
+                                <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)]" />{sub.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <span className="text-[var(--brand-text-secondary)] font-semibold ml-2">
                         ${(item.product.price * item.quantity).toFixed(0)}
@@ -251,13 +257,30 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                 <div className="p-5 space-y-3">
                   <div className="p-4 bg-gray-50 rounded-xl space-y-2 text-sm">
                     {cart.map((item) => (
-                      <div key={item.product.id} className="flex justify-between">
-                        <span className="text-[var(--brand-text)]">
-                          {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
-                        </span>
-                        <span className="text-[var(--brand-text-secondary)] font-medium">
-                          ${(item.product.price * item.quantity).toFixed(0)}
-                        </span>
+                      <div key={item.product.id}>
+                        <div className="flex justify-between">
+                          <span className="text-[var(--brand-text)]">
+                            {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
+                            {item.isPromo && (
+                              <span className={`ml-1 text-[10px] px-1.5 py-0.5 rounded-full ${
+                                item.product.category === "Promocion" ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"
+                              }`}>{item.product.category}</span>
+                            )}
+                          </span>
+                          <span className="text-[var(--brand-text-secondary)] font-medium">
+                            ${(item.product.price * item.quantity).toFixed(0)}
+                          </span>
+                        </div>
+                        {item.isPromo && item.promoSubItems && (
+                          <div className="mt-1 ml-2 space-y-0.5">
+                            {item.promoSubItems.map((sub, idx) => (
+                              <div key={idx} className="flex items-center gap-1 text-[11px] text-[var(--brand-text-muted)]">
+                                <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)]" />
+                                {sub.name}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between font-semibold">
@@ -377,13 +400,24 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
                     <div className="border-t border-dashed border-[var(--brand-border)] pt-2 space-y-1.5">
                       {cart.map((item) => (
-                        <div key={item.product.id} className="flex justify-between text-xs">
-                          <span className="text-[var(--brand-text)]">
-                            {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
-                          </span>
-                          <span className="text-[var(--brand-text-secondary)] font-medium">
-                            ${(item.product.price * item.quantity).toFixed(0)}
-                          </span>
+                        <div key={item.product.id}>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-[var(--brand-text)]">
+                              {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
+                            </span>
+                            <span className="text-[var(--brand-text-secondary)] font-medium">
+                              ${(item.product.price * item.quantity).toFixed(0)}
+                            </span>
+                          </div>
+                          {item.isPromo && item.promoSubItems && (
+                            <div className="mt-1 ml-2">
+                              {item.promoSubItems.map((sub, idx) => (
+                                <div key={idx} className="flex items-center gap-1 text-[10px] text-[var(--brand-text-muted)]">
+                                  <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)]" />{sub.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

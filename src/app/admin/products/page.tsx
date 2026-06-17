@@ -43,6 +43,10 @@ export default function AdminProducts() {
   const [promoPrice, setPromoPrice] = useState("");
   const [promoDetails, setPromoDetails] = useState("");
   const [promoLoading, setPromoLoading] = useState(false);
+  const [promoPickCount, setPromoPickCount] = useState(2);
+  const [promoPayCount, setPromoPayCount] = useState(1);
+  const [promoSelectedProds, setPromoSelectedProds] = useState<number[]>([]);
+  const [promoSlots, setPromoSlots] = useState<{ label: string; eligibleIds: number[] }[]>([]);
 
   const fetchProducts = useCallback(async () => {
     try { const res = await fetch("/api/catalog"); const data = await res.json(); if (Array.isArray(data)) setProducts(data); } catch {}
@@ -58,12 +62,23 @@ export default function AdminProducts() {
 
   const resetPromoForm = () => {
     setPromoName(""); setPromoDesc(""); setPromoPrice(""); setPromoDetails("");
-    setEditPromo(null); setPromoForm(false);
+    setPromoPickCount(2); setPromoPayCount(1); setPromoSelectedProds([]);
+    setPromoSlots([]); setEditPromo(null); setPromoForm(false);
   };
 
   const startEditPromo = (p: any) => {
     setPromoName(p.name); setPromoDesc(p.description); setPromoPrice(String(p.price));
     setPromoDetails((p.details || []).join("\n"));
+    const cfg = p.config || {};
+    if (p.type === "promotion") {
+      setPromoPickCount(cfg.pickCount || 2);
+      setPromoPayCount(cfg.payCount || 1);
+      setPromoSelectedProds(cfg.eligibleProductIds || []);
+      setPromoSlots([]);
+    } else {
+      setPromoSlots((cfg.slots || []).map((s: any) => ({ label: s.label, eligibleIds: s.eligibleProductIds || [] })));
+      setPromoSelectedProds([]);
+    }
     setEditPromo(p); setPromoForm(true);
   };
 
@@ -72,12 +87,17 @@ export default function AdminProducts() {
     if (!promoName.trim()) return;
     setPromoLoading(true);
 
+    const config = sectionType === "packages"
+      ? { slots: promoSlots.map(s => ({ label: s.label, eligibleProductIds: s.eligibleIds, required: true, maxSelect: 1 })) }
+      : { pickCount: promoPickCount, payCount: promoPayCount, eligibleProductIds: promoSelectedProds };
+
     const body: any = {
       name: promoName.trim(),
       description: promoDesc.trim(),
       price: Number(promoPrice) || 0,
       type: sectionType === "packages" ? "package" : "promotion",
       details: promoDetails.split("\n").map(l => l.trim()).filter(Boolean),
+      config,
     };
 
     try {
@@ -439,7 +459,7 @@ export default function AdminProducts() {
         {/* Promo Form Modal */}
         {promoForm && (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in">
+            <div className="bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
               <h2 className="text-sm font-semibold text-[var(--admin-text)] mb-4">
                 {editPromo ? "Editar" : "Nuevo"} {sectionType === "promotions" ? "Promocion" : "Paquete"}
               </h2>
@@ -469,10 +489,99 @@ export default function AdminProducts() {
                   <textarea value={promoDesc} onChange={e => setPromoDesc(e.target.value)} rows={2}
                     className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all resize-none" />
                 </div>
+
+                {/* Config section */}
+                <div className="rounded-xl border border-[var(--admin-accent)]/20 bg-[var(--admin-accent)]/3 p-4 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-[var(--admin-accent)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span className="text-xs font-medium text-[var(--admin-text)]">
+                      {sectionType === "promotions" ? "Configurar productos elegibles" : "Configurar slots del paquete"}
+                    </span>
+                  </div>
+
+                  {sectionType === "promotions" ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Cantidad a elegir</label>
+                          <input type="number" value={promoPickCount} onChange={e => setPromoPickCount(Number(e.target.value))} min={1} max={10}
+                            className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Cantidad a pagar</label>
+                          <input type="number" value={promoPayCount} onChange={e => setPromoPayCount(Number(e.target.value))} min={1} max={10}
+                            className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-sm text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider block mb-1.5">Productos elegibles</label>
+                          <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] p-2">
+                            {products.filter(p => p.active === 1).map(p => {
+                              const checked = promoSelectedProds.includes(p.id);
+                              return (
+                                <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--admin-bg-hover)] cursor-pointer transition-colors">
+                                  <input type="checkbox" checked={checked}
+                                    onChange={() => setPromoSelectedProds(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id])}
+                                    className="w-3.5 h-3.5 rounded border-[var(--admin-border)] text-[var(--admin-accent)] focus:ring-[var(--admin-accent)]" />
+                                  <span className="text-xs text-[var(--admin-text)]">{p.name}</span>
+                                  <span className="text-[10px] text-[var(--admin-text-muted)] ml-auto">{p.category} — ${p.price.toFixed(0)}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-3">
+                      {promoSlots.map((slot, idx) => (
+                        <div key={idx} className="rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <input type="text" value={slot.label} onChange={e => {
+                              const next = [...promoSlots]; next[idx].label = e.target.value; setPromoSlots(next);
+                            }} placeholder="Ej: Bebida Caliente"
+                              className="flex-1 px-2 py-1 text-xs rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg)] text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50" />
+                            <button type="button" onClick={() => setPromoSlots(prev => prev.filter((_, i) => i !== idx))}
+                              className="ml-2 w-6 h-6 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-all">
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                              <div className="max-h-32 overflow-y-auto space-y-0.5">
+                                {products.filter(p => p.active === 1).map(p => {
+                                  const checked = slot.eligibleIds.includes(p.id);
+                                  return (
+                                    <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-[var(--admin-bg-hover)] cursor-pointer">
+                                      <input type="checkbox" checked={checked}
+                                        onChange={() => setPromoSlots(prev => prev.map((s, i) => {
+                                          if (i !== idx) return s;
+                                          return {
+                                            ...s,
+                                            eligibleIds: s.eligibleIds.includes(p.id)
+                                              ? s.eligibleIds.filter(x => x !== p.id)
+                                              : [...s.eligibleIds, p.id]
+                                          };
+                                        }))}
+                                        className="w-3 h-3 rounded border-[var(--admin-border)] text-[var(--admin-accent)]" />
+                                      <span className="text-[11px] text-[var(--admin-text)]">{p.name}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setPromoSlots(prev => [...prev, { label: "", eligibleIds: [] }])}
+                        className="w-full py-2 text-[11px] border border-dashed border-[var(--admin-border)] text-[var(--admin-text-muted)] rounded-lg hover:border-[var(--admin-accent)]/30 hover:text-[var(--admin-accent)] transition-all">
+                        + Agregar slot
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div>
-                  <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Detalles (uno por linea)</label>
-                  <textarea value={promoDetails} onChange={e => setPromoDetails(e.target.value)} rows={3}
-                    placeholder="Valido lunes a viernes&#10;Aplica en: Americano, Latte&#10;Hasta agotar existencias"
+                  <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">Detalles adicionales (uno por linea)</label>
+                  <textarea value={promoDetails} onChange={e => setPromoDetails(e.target.value)} rows={2}
+                    placeholder="Valido lunes a viernes&#10;Hasta agotar existencias"
                     className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-sm text-[var(--admin-text)] font-mono focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all resize-none" />
                 </div>
                 <div className="flex gap-2 pt-2">
