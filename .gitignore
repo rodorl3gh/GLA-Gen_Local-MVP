@@ -7,5 +7,4 @@
 *.db-wal
 /data/
 /auth/
-/public/uploads/
 tsconfig.tsbuildinfo
