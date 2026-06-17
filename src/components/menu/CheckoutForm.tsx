@@ -39,7 +39,7 @@ declare global {
 function getMpPublicKey(): string {
   const mode = process.env.NEXT_PUBLIC_MP_MODE || "production";
   return mode === "sandbox"
-    ? process.env.NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY || process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || ""
+    ? process.env.NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY || ""
     : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
 }
 
@@ -80,6 +80,13 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   }, [open]);
 
   const loadMpSdk = useCallback(() => {
+    const mpKey = getMpPublicKey();
+    if (!mpKey) {
+      setMpLoaded(false);
+      setError("Credenciales de Mercado Pago no configuradas. Revisa NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY en .env.local");
+      return;
+    }
+
     if (document.querySelector('script[src="https://sdk.mercadopago.com/js/v2"]')) {
       if (window.MercadoPago) { setMpLoaded(true); return; }
       const checkExist = setInterval(() => {

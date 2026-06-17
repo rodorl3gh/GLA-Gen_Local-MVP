@@ -1,6 +1,6 @@
 const MP_MODE = process.env.MP_MODE || "production";
 const MP_ACCESS_TOKEN = MP_MODE === "sandbox"
-  ? (process.env.MERCADOPAGO_SANDBOX_ACCESS_TOKEN || process.env.MERCADOPAGO_ACCESS_TOKEN || "")
+  ? (process.env.MERCADOPAGO_SANDBOX_ACCESS_TOKEN || "")
   : (process.env.MERCADOPAGO_ACCESS_TOKEN || "");
 const MP_API_BASE = "https://api.mercadopago.com";
 
