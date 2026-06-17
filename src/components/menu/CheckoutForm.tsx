@@ -36,6 +36,13 @@ declare global {
   }
 }
 
+function getMpPublicKey(): string {
+  const mode = process.env.NEXT_PUBLIC_MP_MODE || "production";
+  return mode === "sandbox"
+    ? process.env.NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY || process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || ""
+    : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+}
+
 export default function CheckoutForm({ open, onClose, cart, total, tableNumber, onSuccess }: Props) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -84,7 +91,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     script.src = "https://sdk.mercadopago.com/js/v2";
     script.async = true;
     script.onload = () => {
-      const mpKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+      const mpKey = getMpPublicKey();
       if (mpKey && window.MercadoPago) new window.MercadoPago(mpKey, { locale: "es-MX" });
       setMpLoaded(true);
     };
@@ -108,7 +115,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
   const renderCardBrick = useCallback(async () => {
     if (!brickContainerRef.current || !window.MercadoPago || !mpLoaded) return;
-    const mpKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+    const mpKey = getMpPublicKey();
     const mp = new window.MercadoPago(mpKey, { locale: "es-MX" });
     brickContainerRef.current.innerHTML = "";
     setMpBrickLoading(true);
