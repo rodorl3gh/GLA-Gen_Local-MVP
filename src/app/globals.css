@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+/* =============================================
+   TEMA MENÚ (cliente / público)
+   ============================================= */
+:root {
+  --brand-primary: #c07a5b;
+  --brand-primary-dark: #a86448;
+  --brand-primary-light: #d4947a;
+  --brand-bg: #faf7f2;
+  --brand-bg-card: #ffffff;
+  --brand-text: #2d2a26;
+  --brand-text-secondary: #6b6560;
+  --brand-text-muted: #9e9690;
+  --brand-accent: #10b981;
+  --brand-border: #e8e2da;
+}
+
+/* =============================================
+   RESET & BASE
+   ============================================= */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--brand-border); border-radius: 10px; }
+
+/* =============================================
+   CARDS & COMPONENTS MENÚ
+   ============================================= */
+.menu-card {
+  background: var(--brand-bg-card);
+  border: 1px solid var(--brand-border);
+  border-radius: 1rem;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.menu-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06);
+  border-color: var(--brand-primary-light);
+}
+
+.glass-card {
+  background: var(--brand-bg-card);
+  border: 1px solid var(--brand-border);
+  border-radius: 1rem;
+}
+
+.btn-primary {
+  background: var(--brand-primary);
+  color: white;
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary:hover {
+  background: var(--brand-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(192, 122, 91, 0.3);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--brand-primary);
+  color: var(--brand-primary);
+  padding: 0.625rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-outline:hover {
+  background: var(--brand-primary);
+  color: white;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--brand-primary);
+  color: white;
+}
+
+/* =============================================
+   ANIMATIONS
+   ============================================= */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-up { animation: fadeInUp 0.5s ease-out forwards; }
+.animate-slide-right { animation: slideInRight 0.3s ease-out; }
+.animate-scale-in { animation: scaleIn 0.3s ease-out; }
+.pulse-dot { animation: pulse-dot 2s infinite; }
+
+.stagger-1 { animation-delay: 0.05s; opacity: 0; }
+.stagger-2 { animation-delay: 0.1s; opacity: 0; }
+.stagger-3 { animation-delay: 0.15s; opacity: 0; }
+.stagger-4 { animation-delay: 0.2s; opacity: 0; }
+.stagger-5 { animation-delay: 0.25s; opacity: 0; }
+
+/* =============================================
+   ADMIN LIGHT THEME OVERRIDES
+   ============================================= */
+
+body.admin-mode {
+  --admin-bg: #0d0b08;
+  --admin-bg-secondary: #17130f;
+  --admin-bg-tertiary: #1f1a15;
+  --admin-bg-input: #0d0b08;
+  --admin-bg-hover: #1f1a15;
+  --admin-text: #e6ddd0;
+  --admin-text-secondary: #9c927e;
+  --admin-text-muted: #6b6252;
+  --admin-border: #2e261c;
+  --admin-border-hover: #3a3124;
+  --admin-placeholder: #4a4237;
+  --admin-shadow: rgba(0, 0, 0, 0.4);
+  --admin-glow: rgba(192, 122, 91, 0.04);
+  --admin-accent: #c07a5b;
+  --admin-accent-hover: #a86448;
+  background-color: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+body.admin-mode.admin-light {
+  --admin-bg: #f8f6f0;
+  --admin-bg-secondary: #ffffff;
+  --admin-bg-tertiary: #f0ede5;
+  --admin-bg-input: #ffffff;
+  --admin-bg-hover: #e8e4da;
+  --admin-text: #1a1815;
+  --admin-text-secondary: #5c5548;
+  --admin-text-muted: #8a8170;
+  --admin-border: #d9d2c4;
+  --admin-border-hover: #c5bfb0;
+  --admin-placeholder: #b5ad9e;
+  --admin-shadow: rgba(0, 0, 0, 0.06);
+  --admin-glow: rgba(192, 122, 91, 0.08);
+  --admin-accent: #c07a5b;
+  --admin-accent-hover: #a86448;
+}
+
+/* =============================================
+   ADMIN MODE OVERRIDES
+   ============================================= */
+body.admin-mode .menu-card {
+  background: var(--admin-bg-card);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+body.admin-mode .menu-card:hover {
+  border-color: var(--admin-accent);
+}
+
+body.admin-mode ::-webkit-scrollbar { width: 6px; }
+body.admin-mode ::-webkit-scrollbar-track { background: var(--admin-bg-secondary); }
+body.admin-mode ::-webkit-scrollbar-thumb { background: var(--admin-border); border-radius: 10px; }
+body.admin-mode ::-webkit-scrollbar-thumb:hover { background: var(--admin-text-muted); }
+
+/* Range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--admin-accent);
+  cursor: pointer;
+  border: 2px solid var(--admin-bg-secondary);
+  box-shadow: 0 2px 8px rgba(192, 122, 91, 0.3);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--admin-accent);
+  cursor: pointer;
+  border: 2px solid var(--admin-bg-secondary);
+}
