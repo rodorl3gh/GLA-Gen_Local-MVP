@@ -68,6 +68,9 @@ function runMigrations(db: Database.Database) {
       payment_method TEXT DEFAULT '',
       status TEXT CHECK(status IN ('pending','preparing','delivered','cancelled')) NOT NULL DEFAULT 'pending',
       notes TEXT DEFAULT '',
+      mp_payment_id TEXT DEFAULT '',
+      payment_status TEXT DEFAULT 'pending',
+      mp_payment_data TEXT DEFAULT '{}',
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
@@ -139,6 +142,11 @@ function runMigrations(db: Database.Database) {
   // Migration: add config column if not exists (for DBs created before this migration)
   try { db.exec(`ALTER TABLE promotions ADD COLUMN config TEXT DEFAULT '{}'`); } catch {}
 
+  // Migration: add Mercado Pago columns to orders
+  try { db.exec(`ALTER TABLE orders ADD COLUMN mp_payment_id TEXT DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'`); } catch {}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN mp_payment_data TEXT DEFAULT '{}'`); } catch {}
+
   seedDefaults(db);
 
   // Migration: update existing promos with proper config (idempotent — only updates rows with empty config)
@@ -152,7 +160,6 @@ function runMigrations(db: Database.Database) {
     UPDATE promotions SET config = '{"slots":[{"label":"Bebidas","eligibleProductIds":[6,10],"required":true,"maxSelect":2},{"label":"Panaderia","eligibleProductIds":[7,8,9],"required":true,"maxSelect":2}]}'
     WHERE name = 'Combo Amigos' AND (config IS NULL OR config = '{}');
   `);
-}
 }
 
 function seedDefaults(db: Database.Database) {
@@ -187,8 +194,8 @@ function seedDefaults(db: Database.Database) {
 function seedPaymentMethods(db: Database.Database) {
   const methods = [
     { name: "Efectivo", enabled: 1, details: JSON.stringify(["Pago directamente en nuestra sucursal al recibir tu pedido."]) },
-    { name: "Transferencia", enabled: 1, details: JSON.stringify(["Banco: BBVA", "Cuenta: 0123456789", "CLABE: 012345678901234567", "Titular: Cafeteria Luna Test"]) },
-    { name: "PayPal", enabled: 0, details: JSON.stringify(["Correo PayPal: pagos@cafeterialuna.com"]) },
+    { name: "Tarjeta", enabled: 1, details: JSON.stringify(["Paga con tarjeta de credito o debito via Mercado Pago."]) },
+    { name: "Transferencia", enabled: 1, details: JSON.stringify(["Transfiere via SPEI con referencia unica generada por Mercado Pago."]) },
   ];
 
   const stmt = db.prepare(
@@ -482,10 +489,10 @@ export function searchCatalog(query: string): any[] {
 
 // ── Orders
 
-export function createOrder(phone: string, items: any[], total: number, paymentMethod: string, notes?: string): number {
+export function createOrder(phone: string, items: any[], total: number, paymentMethod: string, notes?: string, mpPaymentId?: string, paymentStatus?: string, mpPaymentData?: any): number {
   const result = getDb()
-    .prepare("INSERT INTO orders (phone, items, total, payment_method, notes) VALUES (?, ?, ?, ?, ?)")
-    .run(phone, JSON.stringify(items), total, paymentMethod, notes ?? "");
+    .prepare("INSERT INTO orders (phone, items, total, payment_method, notes, mp_payment_id, payment_status, mp_payment_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(phone, JSON.stringify(items), total, paymentMethod, notes ?? "", mpPaymentId ?? "", paymentStatus ?? "pending", JSON.stringify(mpPaymentData ?? {}));
   return Number(result.lastInsertRowid);
 }
 
@@ -511,6 +518,18 @@ export function getOrderById(id: number): any {
 
 export function updateOrderStatus(id: number, status: "pending" | "preparing" | "delivered" | "cancelled") {
   getDb().prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+}
+
+export function updateOrderPayment(orderId: number, mpPaymentId: string, paymentStatus: string, mpPaymentData?: any) {
+  getDb()
+    .prepare("UPDATE orders SET mp_payment_id = ?, payment_status = ?, mp_payment_data = ? WHERE id = ?")
+    .run(mpPaymentId, paymentStatus, JSON.stringify(mpPaymentData ?? {}), orderId);
+}
+
+export function getOrderByMpPaymentId(mpPaymentId: string): any {
+  const order = getDb().prepare("SELECT * FROM orders WHERE mp_payment_id = ?").get(mpPaymentId) as any;
+  if (!order) return null;
+  return { ...order, items: JSON.parse(order.items || "[]"), mp_payment_data: JSON.parse(order.mp_payment_data || "{}") };
 }
 
 export function getOrdersStats(): any {

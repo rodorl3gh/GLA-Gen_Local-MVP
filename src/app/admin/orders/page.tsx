@@ -12,6 +12,13 @@ const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
   cancelled:  { label: "Cancelado", cls: "bg-red-500/15 text-red-400 border-red-500/30", icon: "M6 18L18 6M6 6l12 12" },
 };
 
+const PAYMENT_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Pago Pendiente", cls: "bg-amber-500/10 text-amber-500 border-amber-500/20" },
+  approved:  { label: "Pago Aprobado", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" },
+  rejected:  { label: "Pago Rechazado", cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+  refunded:  { label: "Reembolsado", cls: "bg-purple-500/10 text-purple-500 border-purple-500/20" },
+};
+
 const STATUS_ORDER = ["pending", "preparing", "delivered", "cancelled"];
 
 function timeAgo(isoString: string): string {
@@ -133,6 +140,7 @@ export default function AdminOrders() {
 
   const renderListRow = (o: any) => {
     const s = STATUS[o.status] || STATUS.pending;
+    const ps = PAYMENT_STATUS[o.payment_status] || null;
     return (
       <div key={o.id} onClick={() => setSelected(o)}
         className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
@@ -143,6 +151,9 @@ export default function AdminOrders() {
         <span className="text-sm font-mono text-[var(--admin-text)] font-medium w-16 shrink-0">#{o.id}</span>
         <div className="flex-1 min-w-0">
           <p className="text-xs text-[var(--admin-text-secondary)] line-clamp-1">{o.items?.map((i: any) => `${i.name} x${i.quantity}`).join(", ")}</p>
+          {o.payment_method && (
+            <p className="text-[10px] text-[var(--admin-text-muted)] mt-0.5">{o.payment_method}</p>
+          )}
         </div>
         <span className="text-xs text-[var(--admin-text-muted)] flex items-center gap-1 shrink-0">
           <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -151,6 +162,9 @@ export default function AdminOrders() {
           {o.phone || "\u2014"}
         </span>
         <span className={`text-[10px] px-2 py-1 rounded-full border shrink-0 ${s.cls}`}>{s.label}</span>
+        {ps && (
+          <span className={`text-[10px] px-2 py-1 rounded-full border shrink-0 ${ps.cls}`}>{ps.label}</span>
+        )}
         <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
         <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
       </div>
@@ -158,6 +172,7 @@ export default function AdminOrders() {
   };
 
   const renderKanbanCard = (o: any) => {
+    const ps = PAYMENT_STATUS[o.payment_status] || null;
     return (
       <div key={o.id} onClick={() => setSelected(o)}
         draggable
@@ -181,7 +196,7 @@ export default function AdminOrders() {
             </p>
           ))}
         </div>
-        <div className="flex items-center justify-between text-[10px] text-[var(--admin-text-muted)]">
+        <div className="flex items-center justify-between text-[10px] text-[var(--admin-text-muted)] mb-1.5">
           <span className="flex items-center gap-1">
             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -189,6 +204,14 @@ export default function AdminOrders() {
             {o.phone || "\u2014"}
           </span>
           <span>{timeAgo(o.created_at)}</span>
+        </div>
+        <div className="flex items-center gap-1 flex-wrap">
+          {o.payment_method && (
+            <span className="text-[9px] text-[var(--admin-text-muted)] bg-[var(--admin-bg)] px-1.5 py-0.5 rounded">{o.payment_method}</span>
+          )}
+          {ps && (
+            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${ps.cls}`}>{ps.label}</span>
+          )}
         </div>
       </div>
     );
@@ -269,6 +292,7 @@ export default function AdminOrders() {
                   <span className="w-16 shrink-0">#ID</span>
                   <span className="flex-1">Productos</span>
                   <span className="shrink-0">Estado</span>
+                  <span className="shrink-0">Pago</span>
                   <span className="shrink-0 w-16 text-right">Total</span>
                   <span className="shrink-0 w-20 text-right">Tiempo</span>
                 </div>
@@ -368,6 +392,18 @@ export default function AdminOrders() {
                     <span className="text-sm font-semibold text-[var(--admin-text)]">Total</span>
                     <span className="text-sm font-bold text-[var(--admin-accent)]">${Number(selected.total).toFixed(0)}</span>
                   </div>
+
+                  {selected.mp_payment_id && (
+                    <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1">Pago Mercado Pago</p>
+                      <p className="text-[11px] text-[var(--admin-text-secondary)] font-mono">{selected.mp_payment_id}</p>
+                      {selected.payment_status && PAYMENT_STATUS[selected.payment_status] && (
+                        <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full border ${PAYMENT_STATUS[selected.payment_status].cls}`}>
+                          {PAYMENT_STATUS[selected.payment_status].label}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="border-t border-[var(--admin-border)] pt-3">
                     <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3">Cambiar estado</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { CartItem } from "@/app/menu/page";
 
 interface Props {
@@ -30,6 +30,12 @@ interface TicketData {
   date: string;
 }
 
+declare global {
+  interface Window {
+    MercadoPago: any;
+  }
+}
+
 export default function CheckoutForm({ open, onClose, cart, total, tableNumber, onSuccess }: Props) {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -41,6 +47,12 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const [error, setError] = useState("");
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [ticket, setTicket] = useState<TicketData | null>(null);
+
+  const [mpLoaded, setMpLoaded] = useState(false);
+  const [mpBrickLoading, setMpBrickLoading] = useState(false);
+  const brickContainerRef = useRef<HTMLDivElement>(null);
+
+  const isMpPayment = payment === "Tarjeta" || payment === "Transferencia";
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +68,40 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       .catch(() => {});
   }, [open]);
 
-  // Reset on close
+  const loadMpSdk = useCallback(() => {
+    if (document.querySelector('script[src="https://sdk.mercadopago.com/js/v2"]')) {
+      if (window.MercadoPago) {
+        setMpLoaded(true);
+        return;
+      }
+      const checkExist = setInterval(() => {
+        if (window.MercadoPago) {
+          setMpLoaded(true);
+          clearInterval(checkExist);
+        }
+      }, 100);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://sdk.mercadopago.com/js/v2";
+    script.async = true;
+    script.onload = () => {
+      const mpKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+      if (mpKey && window.MercadoPago) {
+        new window.MercadoPago(mpKey, { locale: "es-MX" });
+      }
+      setMpLoaded(true);
+    };
+    script.onerror = () => setMpLoaded(false);
+    document.body.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !isMpPayment) return;
+    loadMpSdk();
+  }, [open, isMpPayment, loadMpSdk]);
+
   useEffect(() => {
     if (!open) {
       setStep(1);
@@ -66,8 +111,145 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       setName("");
       setNotes("");
       setError("");
+      setMpLoaded(false);
+      setMpBrickLoading(false);
     }
   }, [open, tableNumber]);
+
+  const renderMpBrick = useCallback(async () => {
+    if (!brickContainerRef.current || !window.MercadoPago || !mpLoaded) return;
+
+    const mpKey = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
+    const mp = new window.MercadoPago(mpKey, { locale: "es-MX" });
+
+    brickContainerRef.current.innerHTML = "";
+    setMpBrickLoading(true);
+    setError("");
+
+    const bricksBuilder = mp.bricks();
+
+    const onSubmit = async (formData: any) => {
+      setSending(true);
+      setError("");
+
+      const items = cart.map((i) => ({
+        name: i.product.name,
+        quantity: i.quantity,
+        price: i.product.price,
+      }));
+
+      try {
+        const res = await fetch("/api/mercadopago/process-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentType: payment === "Tarjeta" ? "card" : "transfer",
+            token: formData.token || undefined,
+            paymentMethodId: formData.payment_method_id || undefined,
+            installments: formData.installments || 1,
+            issuerId: formData.issuer_id || undefined,
+            payerEmail: formData.payer?.email || `${name || "cliente"}@test.com`,
+            payerFirstName: formData.payer?.first_name || name || "Cliente",
+            payerLastName: formData.payer?.last_name || "",
+            items,
+            total,
+            notes: notes.trim(),
+            phone: phone.trim(),
+            clientName: name || "Anonimo",
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.success && data.orderId) {
+          setTicket({
+            orderId: data.orderId,
+            clientName: name || "Anonimo",
+            clientPhone: phone.trim(),
+            payment,
+            notes: notes.trim(),
+            items: [...cart],
+            total,
+            date: new Date().toLocaleString("es-MX", {
+              day: "numeric", month: "short", year: "numeric",
+              hour: "2-digit", minute: "2-digit",
+            }),
+          });
+          onSuccess();
+          setSent(true);
+        } else {
+          setError(data.error || "Error al procesar el pago");
+        }
+      } catch {
+        setError("Error de conexion. Intenta de nuevo.");
+      }
+
+      setSending(false);
+    };
+
+    const onError = (brickError: any) => {
+      setMpBrickLoading(false);
+      setError(brickError?.message || "Error al cargar el formulario de pago");
+    };
+
+    try {
+      if (payment === "Tarjeta") {
+        await bricksBuilder.create("cardPayment", brickContainerRef.current.id, {
+          initialization: {
+            amount: total,
+            payer: { firstName: name || "Cliente" },
+          },
+          customization: {
+            visual: {
+              style: { theme: "default" },
+              hidePaymentButton: false,
+            },
+            paymentMethods: {
+              maxInstallments: 6,
+            },
+          },
+          callbacks: { onSubmit, onError, onReady: () => setMpBrickLoading(false) },
+        });
+      } else {
+        await bricksBuilder.create("payment", brickContainerRef.current.id, {
+          initialization: {
+            amount: total,
+            payer: {
+              firstName: name || "Cliente",
+              email: `${name || "cliente"}@test.com`,
+            },
+          },
+          customization: {
+            visual: {
+              style: { theme: "default" },
+              hidePaymentButton: false,
+            },
+            paymentMethods: {
+              bank_transfer: "all",
+              maxInstallments: 1,
+            },
+          },
+          callbacks: { onSubmit, onError, onReady: () => setMpBrickLoading(false) },
+        });
+      }
+    } catch (brickErr: any) {
+      setMpBrickLoading(false);
+      setError(brickErr?.message || "Error al inicializar el formulario de pago");
+    }
+  }, [mpLoaded, payment, total, name, phone, notes, cart, onSuccess]);
+
+  useEffect(() => {
+    if (step === 3 && isMpPayment && mpLoaded && brickContainerRef.current && open) {
+      const timer = setTimeout(() => renderMpBrick(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [step, isMpPayment, mpLoaded, open, renderMpBrick]);
+
+  useEffect(() => {
+    if (step === 3 && isMpPayment && payment && mpLoaded) {
+      renderMpBrick();
+    }
+  }, [payment]);
 
   if (!open) return null;
 
@@ -95,7 +277,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       return;
     }
 
-    // Step 3 → confirmar y enviar
     handleSubmit();
   };
 
@@ -135,7 +316,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
           total,
           date: new Date().toLocaleString("es-MX", {
             day: "numeric", month: "short", year: "numeric",
-            hour: "2-digit", minute: "2-digit"
+            hour: "2-digit", minute: "2-digit",
           }),
         });
       }
@@ -159,7 +340,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
           {sent && ticket ? (
-            /* FINAL TICKET */
             <div className="p-6">
               <div className="border-2 border-dashed border-[var(--brand-primary)]/30 rounded-2xl p-5 bg-[var(--brand-bg)]">
                 <div className="text-center mb-4">
@@ -233,7 +413,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
             </div>
           ) : (
             <>
-              {/* Header */}
               <div className="p-5 border-b border-[var(--brand-border)] flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-[var(--brand-text)]">
@@ -252,7 +431,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                 </button>
               </div>
 
-              {/* Step 1: Review cart */}
               {step === 1 && (
                 <div className="p-5 space-y-3">
                   <div className="p-4 bg-gray-50 rounded-xl space-y-2 text-sm">
@@ -294,7 +472,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                 </div>
               )}
 
-              {/* Step 2: Customer data */}
               {step === 2 && (
                 <div className="p-5 space-y-4">
                   <div>
@@ -346,6 +523,14 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                         </button>
                       ))}
                     </div>
+                    {isMpPayment && (
+                      <p className="text-[10px] text-[var(--brand-primary)] mt-1.5 flex items-center gap-1">
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Pago seguro via Mercado Pago
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -368,91 +553,146 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                     </button>
                     <button onClick={handleContinue}
                       className="btn-primary flex-1 py-3 text-sm font-semibold">
-                      Revisar Pedido →
+                      {isMpPayment ? "Ir a Pagar →" : "Revisar Pedido →"}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Step 3: Pre-ticket confirmation */}
               {step === 3 && (
                 <div className="p-5 space-y-4">
-                  <div className="border-2 border-dashed border-[var(--brand-primary)]/20 rounded-2xl p-4 bg-[var(--brand-bg)]">
-                    <div className="text-center mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-[var(--brand-primary)] flex items-center justify-center text-white font-bold mx-auto mb-1">L</div>
-                      <h3 className="text-xs font-semibold text-[var(--brand-text)]">Confirma tu pedido</h3>
-                    </div>
-
-                    <div className="text-[10px] space-y-2 mb-3">
-                      <div className="flex justify-between">
-                        <span className="text-[var(--brand-text-muted)]">Cliente</span>
-                        <span className="text-[var(--brand-text)] font-medium">{name || "Anonimo"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[var(--brand-text-muted)]">Mesa / Tel</span>
-                        <span className="text-[var(--brand-text)] font-medium">{phone}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[var(--brand-text-muted)]">Pago</span>
-                        <span className="text-[var(--brand-text)] font-medium">{payment}</span>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-dashed border-[var(--brand-border)] pt-2 space-y-1.5">
-                      {cart.map((item) => (
-                        <div key={item.product.id}>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-[var(--brand-text)]">
-                              {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
-                            </span>
-                            <span className="text-[var(--brand-text-secondary)] font-medium">
-                              ${(item.product.price * item.quantity).toFixed(0)}
-                            </span>
-                          </div>
-                          {item.isPromo && item.promoSubItems && (
-                            <div className="mt-1 ml-2">
-                              {item.promoSubItems.map((sub, idx) => (
-                                <div key={idx} className="flex items-center gap-1 text-[10px] text-[var(--brand-text-muted)]">
-                                  <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)]" />{sub.name}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                  {isMpPayment ? (
+                    <div className="space-y-4">
+                      <div className="p-3 bg-[var(--brand-bg)] rounded-xl border border-[var(--brand-border)]">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-semibold text-[var(--brand-text)]">Total a pagar</span>
+                          <span className="text-lg font-bold text-[var(--brand-primary)]">${total.toFixed(0)}</span>
                         </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-dashed border-[var(--brand-border)] pt-2 mt-2 flex justify-between items-center">
-                      <span className="text-xs font-bold text-[var(--brand-text)]">TOTAL</span>
-                      <span className="text-lg font-bold text-[var(--brand-primary)]">${total.toFixed(0)}</span>
-                    </div>
-
-                    {notes && (
-                      <div className="border-t border-dashed border-[var(--brand-border)] mt-2 pt-2">
                         <p className="text-[10px] text-[var(--brand-text-muted)]">
-                          <span className="font-semibold">Notas:</span> {notes}
+                          {payment === "Tarjeta"
+                            ? "Ingresa los datos de tu tarjeta para completar el pago."
+                            : "Selecciona tu banco y genera la referencia para transferir."}
                         </p>
                       </div>
-                    )}
-                  </div>
 
-                  {error && (
-                    <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+                      {mpBrickLoading && (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
+                          <span className="ml-2 text-xs text-[var(--brand-text-muted)]">Cargando formulario de pago...</span>
+                        </div>
+                      )}
+
+                      {!mpLoaded && !mpBrickLoading && (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
+                          <span className="ml-2 text-xs text-[var(--brand-text-muted)]">Conectando con Mercado Pago...</span>
+                        </div>
+                      )}
+
+                      <div
+                        id="mp-brick-container"
+                        ref={brickContainerRef}
+                        className={`min-h-[200px] ${mpBrickLoading || !mpLoaded ? "hidden" : ""}`}
+                      />
+
+                      {error && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                          <p className="text-red-600 text-xs">{error}</p>
+                        </div>
+                      )}
+
+                      {sending && (
+                        <div className="flex items-center justify-center gap-2 py-2">
+                          <div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
+                          <span className="text-xs text-[var(--brand-text-muted)]">Procesando pago...</span>
+                        </div>
+                      )}
+
+                      <button onClick={() => { setStep(2); setError(""); }}
+                        className="btn-outline w-full py-3 text-sm font-medium">
+                        ← Cambiar metodo de pago
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="border-2 border-dashed border-[var(--brand-primary)]/20 rounded-2xl p-4 bg-[var(--brand-bg)]">
+                        <div className="text-center mb-3">
+                          <div className="w-10 h-10 rounded-xl bg-[var(--brand-primary)] flex items-center justify-center text-white font-bold mx-auto mb-1">L</div>
+                          <h3 className="text-xs font-semibold text-[var(--brand-text)]">Confirma tu pedido</h3>
+                        </div>
+
+                        <div className="text-[10px] space-y-2 mb-3">
+                          <div className="flex justify-between">
+                            <span className="text-[var(--brand-text-muted)]">Cliente</span>
+                            <span className="text-[var(--brand-text)] font-medium">{name || "Anonimo"}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[var(--brand-text-muted)]">Mesa / Tel</span>
+                            <span className="text-[var(--brand-text)] font-medium">{phone}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[var(--brand-text-muted)]">Pago</span>
+                            <span className="text-[var(--brand-text)] font-medium">{payment}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-dashed border-[var(--brand-border)] pt-2 space-y-1.5">
+                          {cart.map((item) => (
+                            <div key={item.product.id}>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-[var(--brand-text)]">
+                                  {item.product.name} <span className="text-[var(--brand-text-muted)]">x{item.quantity}</span>
+                                </span>
+                                <span className="text-[var(--brand-text-secondary)] font-medium">
+                                  ${(item.product.price * item.quantity).toFixed(0)}
+                                </span>
+                              </div>
+                              {item.isPromo && item.promoSubItems && (
+                                <div className="mt-1 ml-2">
+                                  {item.promoSubItems.map((sub, idx) => (
+                                    <div key={idx} className="flex items-center gap-1 text-[10px] text-[var(--brand-text-muted)]">
+                                      <span className="w-1 h-1 rounded-full bg-[var(--brand-primary)]" />{sub.name}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="border-t border-dashed border-[var(--brand-border)] pt-2 mt-2 flex justify-between items-center">
+                          <span className="text-xs font-bold text-[var(--brand-text)]">TOTAL</span>
+                          <span className="text-lg font-bold text-[var(--brand-primary)]">${total.toFixed(0)}</span>
+                        </div>
+
+                        {notes && (
+                          <div className="border-t border-dashed border-[var(--brand-border)] mt-2 pt-2">
+                            <p className="text-[10px] text-[var(--brand-text-muted)]">
+                              <span className="font-semibold">Notas:</span> {notes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {error && (
+                        <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button onClick={() => setStep(2)}
+                          className="btn-outline flex-1 py-3 text-sm font-medium">
+                          ← Atras
+                        </button>
+                        <button onClick={handleContinue} disabled={sending}
+                          className="btn-primary flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {sending ? "Enviando..." : "Confirmar Pedido"}
+                        </button>
+                      </div>
+                    </>
                   )}
-
-                  <div className="flex gap-2">
-                    <button onClick={() => setStep(2)}
-                      className="btn-outline flex-1 py-3 text-sm font-medium">
-                      ← Atras
-                    </button>
-                    <button onClick={handleContinue} disabled={sending}
-                      className="btn-primary flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {sending ? "Enviando..." : "Confirmar Pedido"}
-                    </button>
-                  </div>
                 </div>
               )}
             </>
