@@ -20,20 +20,45 @@ export async function POST(req: Request) {
       notes,
       phone,
       clientName,
+      simulate,
     } = body;
 
-    if (!payerEmail || !items || !Array.isArray(items) || items.length === 0 || !total) {
+    if (!items || !Array.isArray(items) || items.length === 0 || !total) {
+      return NextResponse.json({ success: false, error: "Datos incompletos" }, { status: 400 });
+    }
+
+    if (!payerEmail && !simulate) {
       return NextResponse.json({ success: false, error: "Datos incompletos" }, { status: 400 });
     }
 
     const payer = {
-      email: payerEmail,
+      email: payerEmail || "simulado@test.com",
       firstName: payerFirstName || clientName || "Cliente",
       lastName: payerLastName || "",
     };
 
     const description = items.map((i: any) => `${i.name} x${i.quantity}`).join(", ").slice(0, 250);
     const orderPhone = phone || clientName || "Cliente";
+
+    if (simulate) {
+      const paymentMethodLabel = paymentType === "card" ? "Tarjeta" : paymentType === "transfer" ? "Transferencia" : "Efectivo";
+      const simulatedPaymentId = `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+      const orderId = createOrder(
+        orderPhone, items, Number(total), paymentMethodLabel,
+        notes || "", simulatedPaymentId, "approved",
+        { simulated: true, id: simulatedPaymentId }
+      );
+
+      try { await notifyOwnerNewOrder(orderId, "Cafeteria Luna Test"); } catch {}
+
+      return NextResponse.json({
+        success: true, orderId, paymentStatus: "approved",
+        mpPaymentId: simulatedPaymentId,
+        paymentData: { simulated: true, status: "approved", statusDetail: "accredited", paymentMethodId: "simulated" },
+      });
+    }
+
     const externalRef = `ORDER-${Date.now()}`;
 
     let mpResult;

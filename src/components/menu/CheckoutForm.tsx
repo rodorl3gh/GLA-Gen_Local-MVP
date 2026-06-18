@@ -57,7 +57,12 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
   const [mpLoaded, setMpLoaded] = useState(false);
   const [mpBrickLoading, setMpBrickLoading] = useState(false);
+  const [cardError, setCardError] = useState(false);
   const brickContainerRef = useRef<HTMLDivElement>(null);
+  const brickControllerRef = useRef<any>(null);
+  const isUnmountingRef = useRef(false);
+
+  const simulatePayments = process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS === "true" || process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS === "1";
 
   const isMpCard = payment === "Tarjeta";
   const selectedMethod = useMemo(() =>
@@ -107,9 +112,20 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   }, []);
 
   useEffect(() => {
-    if (!open || !isMpCard) return;
+    if (!open || !isMpCard || simulatePayments) return;
     loadMpSdk();
-  }, [open, isMpCard, loadMpSdk]);
+  }, [open, isMpCard, loadMpSdk, simulatePayments]);
+
+  const unmountBrick = useCallback(() => {
+    if (isUnmountingRef.current) return;
+    isUnmountingRef.current = true;
+    if (brickControllerRef.current) {
+      try { brickControllerRef.current.unmount(); } catch {}
+      brickControllerRef.current = null;
+    }
+    if (brickContainerRef.current) brickContainerRef.current.innerHTML = "";
+    isUnmountingRef.current = false;
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -117,21 +133,37 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       setPhone(tableNumber ? `Mesa ${tableNumber}` : "");
       setName(""); setNotes(""); setError("");
       setMpLoaded(false); setMpBrickLoading(false);
+      setCardError(false);
+      unmountBrick();
     }
-  }, [open, tableNumber]);
+  }, [open, tableNumber, unmountBrick]);
+
+  useEffect(() => {
+    if (step !== 3 && isMpCard) {
+      unmountBrick();
+      setCardError(false);
+      setMpBrickLoading(false);
+    }
+  }, [step, isMpCard, unmountBrick]);
 
   const renderCardBrick = useCallback(async () => {
     if (!brickContainerRef.current || !window.MercadoPago || !mpLoaded) return;
     const mpKey = getMpPublicKey();
+    if (!mpKey) return;
     const mp = new window.MercadoPago(mpKey, { locale: "es-MX" });
-    brickContainerRef.current.innerHTML = "";
+
+    unmountBrick();
+    brickControllerRef.current = null;
+
     setMpBrickLoading(true);
     setError("");
+    setCardError(false);
 
     const bricksBuilder = mp.bricks();
     const onSubmit = async (formData: any) => {
       setSending(true);
       setError("");
+      setCardError(false);
       const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
       try {
         const res = await fetch("/api/mercadopago/process-payment", {
@@ -153,25 +185,39 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
         if (data.success && data.orderId) {
           setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
           onSuccess(); setSent(true);
-        } else { setError(data.error || "Error al procesar el pago"); }
-      } catch { setError("Error de conexion. Intenta de nuevo."); }
+        } else {
+          setError(data.error || "Error al procesar el pago");
+          setCardError(true);
+          unmountBrick();
+        }
+      } catch {
+        setError("Error de conexion. Intenta de nuevo.");
+        setCardError(true);
+        unmountBrick();
+      }
       setSending(false);
     };
     try {
-      await bricksBuilder.create("cardPayment", brickContainerRef.current.id, {
+      brickControllerRef.current = await bricksBuilder.create("cardPayment", brickContainerRef.current.id, {
         initialization: { amount: total, payer: { firstName: name || "Cliente" } },
         customization: { visual: { style: { theme: "default" }, hidePaymentButton: false }, paymentMethods: { maxInstallments: 6 } },
-        callbacks: { onSubmit, onError: (e: any) => { setMpBrickLoading(false); setError(e?.message || "Error al cargar formulario"); }, onReady: () => setMpBrickLoading(false) },
+        callbacks: { onSubmit, onError: (e: any) => { setMpBrickLoading(false); setError(e?.message || "Error al cargar formulario"); setCardError(true); }, onReady: () => setMpBrickLoading(false) },
       });
-    } catch (e: any) { setMpBrickLoading(false); setError(e?.message || "Error al inicializar formulario"); }
-  }, [mpLoaded, total, name, phone, notes, cart, onSuccess]);
+    } catch (e: any) { setMpBrickLoading(false); setError(e?.message || "Error al inicializar formulario"); setCardError(true); }
+  }, [mpLoaded, total, name, phone, notes, cart, onSuccess, unmountBrick]);
+
+  const retryCardPayment = useCallback(() => {
+    setError("");
+    setCardError(false);
+    renderCardBrick();
+  }, [renderCardBrick]);
 
   useEffect(() => {
-    if (step === 3 && isMpCard && mpLoaded && brickContainerRef.current && open) {
+    if (step === 3 && isMpCard && mpLoaded && brickContainerRef.current && open && !simulatePayments) {
       const timer = setTimeout(() => renderCardBrick(), 100);
       return () => clearTimeout(timer);
     }
-  }, [step, isMpCard, mpLoaded, open, renderCardBrick]);
+  }, [step, isMpCard, mpLoaded, open, renderCardBrick, simulatePayments]);
 
   if (!open) return null;
 
@@ -204,6 +250,35 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       onSuccess();
     } catch {}
     setSending(false); setSent(true);
+  };
+
+  const handleSimulatedCardPayment = async () => {
+    setSending(true); setError(""); setCardError(false);
+    const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
+    try {
+      const res = await fetch("/api/mercadopago/process-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentType: "card",
+          simulate: true,
+          items, total, notes: notes.trim(), phone: phone.trim(), clientName: name || "Anonimo",
+          payerEmail: `${name || "cliente"}@simulado.com`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.orderId) {
+        setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
+        onSuccess(); setSent(true);
+      } else {
+        setError(data.error || "Error al procesar el pago");
+        setCardError(true);
+      }
+    } catch {
+      setError("Error de conexion. Intenta de nuevo.");
+      setCardError(true);
+    }
+    setSending(false);
   };
 
   const displayMethods = paymentMethods.length > 0 ? paymentMethods : [{ id: 0, name: "Efectivo", enabled: 1, details: [] }];
@@ -352,12 +427,49 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                         </div>
                         <p className="text-[10px] text-[var(--brand-text-muted)]">Ingresa los datos de tu tarjeta para completar el pago.</p>
                       </div>
+
+                      {simulatePayments ? (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                            <p className="text-xs text-amber-700 font-medium mb-1">Modo simulacion activo</p>
+                            <p className="text-[10px] text-amber-600">Los pagos no se procesan realmente. Desactiva NEXT_PUBLIC_SIMULATE_PAYMENTS para usar Mercado Pago.</p>
+                          </div>
+                          {error && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
+                          {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Procesando pago simulado...</span></div>)}
+                          {!sending && !error && (
+                            <button onClick={handleSimulatedCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              Pagar (simulado)
+                            </button>
+                          )}
+                          {cardError && !sending && (
+                            <button onClick={handleSimulatedCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                              Reintentar pago
+                            </button>
+                          )}
+                        </div>
+                      ) : (<>
                       {mpBrickLoading && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Cargando formulario de pago...</span></div>)}
-                      {!mpLoaded && !mpBrickLoading && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Conectando con Mercado Pago...</span></div>)}
-                      <div id="mp-brick-container" ref={brickContainerRef} className={`min-h-[200px] ${mpBrickLoading || !mpLoaded ? "hidden" : ""}`} />
-                      {error && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
+                      {!mpLoaded && !mpBrickLoading && !error && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Conectando con Mercado Pago...</span></div>)}
+                      {!mpLoaded && !mpBrickLoading && error && (<div className="p-3 bg-amber-50 border border-amber-200 rounded-xl"><p className="text-amber-700 text-xs font-medium mb-2">No se pudo conectar con Mercado Pago</p><p className="text-amber-600 text-[10px]">{error}</p></div>)}
+                      {!cardError && !mpBrickLoading && mpLoaded && (
+                        <div id="mp-brick-container" ref={brickContainerRef} className="min-h-[200px]" />
+                      )}
+                      {cardError && !mpBrickLoading && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3">
+                          {error && <p className="text-red-600 text-xs">{error}</p>}
+                          <p className="text-xs text-gray-600">Puedes intentar de nuevo con la misma tarjeta o cambiar el metodo de pago.</p>
+                          <button onClick={retryCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Reintentar pago
+                          </button>
+                        </div>
+                      )}
+                      {error && !cardError && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
                       {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Procesando pago...</span></div>)}
-                      <button onClick={() => { setStep(2); setError(""); }} className="btn-outline w-full py-3 text-sm font-medium">← Cambiar metodo de pago</button>
+                      <button onClick={() => { setStep(2); setError(""); unmountBrick(); setCardError(false); }} className="btn-outline w-full py-3 text-sm font-medium">← Cambiar metodo de pago</button>
+                      </>)}
                     </div>
                   ) : (
                     <>
