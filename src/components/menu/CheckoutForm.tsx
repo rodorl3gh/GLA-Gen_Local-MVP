@@ -453,9 +453,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                       {mpBrickLoading && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Cargando formulario de pago...</span></div>)}
                       {!mpLoaded && !mpBrickLoading && !error && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Conectando con Mercado Pago...</span></div>)}
                       {!mpLoaded && !mpBrickLoading && error && (<div className="p-3 bg-amber-50 border border-amber-200 rounded-xl"><p className="text-amber-700 text-xs font-medium mb-2">No se pudo conectar con Mercado Pago</p><p className="text-amber-600 text-[10px]">{error}</p></div>)}
-                      {!cardError && !mpBrickLoading && mpLoaded && (
-                        <div id="mp-brick-container" ref={brickContainerRef} className="min-h-[200px]" />
-                      )}
+                      <div id="mp-brick-container" ref={brickContainerRef} className={`min-h-[200px] ${(!mpLoaded || cardError) ? "hidden" : ""}`} />
                       {cardError && !mpBrickLoading && (
                         <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3">
                           {error && <p className="text-red-600 text-xs">{error}</p>}
