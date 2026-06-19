@@ -95,10 +95,42 @@ export default function AdminContent() {
 
   // Persist history to localStorage
   useEffect(() => {
-    if (savedContent.length > 0) {
-      localStorage.setItem("content_history", JSON.stringify(savedContent));
-    }
+    localStorage.setItem("content_history", JSON.stringify(savedContent));
   }, [savedContent]);
+
+  // Sync server images into history
+  useEffect(() => {
+    if (activeTab !== "history") return;
+    fetch("/api/content/history-images")
+      .then(r => r.json())
+      .then((serverImages: string[]) => {
+        if (!Array.isArray(serverImages) || serverImages.length === 0) return;
+        setSavedContent(prev => {
+          let updated = [...prev];
+          let changed = false;
+          for (const img of serverImages) {
+            const alreadyExists = updated.some(item => item.images.includes(img));
+            if (!alreadyExists) {
+              const filename = img.split("/").pop() || "";
+              const parts = filename.replace(/\.(png|jpg|jpeg|webp)$/i, "").split("_");
+              const dateHint = parts.length >= 3 ? parts.slice(1).join("_") : "";
+              updated = [{
+                id: `server-${Date.now()}-${img}`,
+                caption: "",
+                date: new Date().toLocaleDateString("es-MX"),
+                images: [img],
+                copyType: "",
+                productName: `Generado: ${dateHint || filename}`,
+                aspectRatio: "1:1",
+              }, ...updated];
+              changed = true;
+            }
+          }
+          return changed ? updated.slice(0, 30) : prev;
+        });
+      })
+      .catch(() => {});
+  }, [activeTab]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -137,6 +169,7 @@ export default function AdminContent() {
     setGeneratedImages([]);
 
     let generatedCaption = "";
+    let savedImages: string[] = [];
 
     try {
       // Step 1: Generate text copy via OpenAI
@@ -201,12 +234,31 @@ export default function AdminContent() {
           setError("Copy listo. Error en imagen: " + imgData.error);
         } else if (imgData.images) {
           setGeneratedImages(imgData.images);
+          savedImages = imgData.images;
         }
       }
     } catch {
       setError("Error de conexion. Intenta de nuevo.");
     }
     setGenerating(false);
+
+    // Auto-save to history
+    if (generatedCaption || savedImages.length > 0) {
+      const entry = {
+        id: Date.now().toString(),
+        caption: generatedCaption,
+        date: new Date().toLocaleDateString("es-MX"),
+        images: [...savedImages],
+        copyType,
+        productName: selectedProduct?.name || "",
+        aspectRatio,
+      };
+      setSavedContent(prev => {
+        const exists = prev.some(i => i.caption === entry.caption && i.productName === entry.productName);
+        if (exists) return prev;
+        return [entry, ...prev].slice(0, 30);
+      });
+    }
   };
 
   const handleCopy = () => {
