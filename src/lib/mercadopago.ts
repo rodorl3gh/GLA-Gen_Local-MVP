@@ -1,9 +1,7 @@
 import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 
 const MP_MODE = process.env.MP_MODE || "production";
-const MP_ACCESS_TOKEN = MP_MODE === "sandbox"
-  ? (process.env.MERCADOPAGO_SANDBOX_ACCESS_TOKEN || "")
-  : (process.env.MERCADOPAGO_ACCESS_TOKEN || "");
+const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
 
 const mpClient = new MercadoPagoConfig({
   accessToken: MP_ACCESS_TOKEN,
