@@ -1,4 +1,4 @@
-import { MercadoPagoConfig, Payment } from "mercadopago";
+import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 
 const MP_MODE = process.env.MP_MODE || "production";
 const MP_ACCESS_TOKEN = MP_MODE === "sandbox"
@@ -157,5 +157,44 @@ export async function getPaymentMethods(): Promise<any[]> {
     return Array.isArray(result) ? result : [];
   } catch {
     return [];
+  }
+}
+
+export async function createPreference(params: {
+  items: Array<{ id: string; title: string; quantity: number; unit_price: number }>;
+  payer?: { name?: string; email?: string; phone?: { area_code: string; number: string } };
+  externalReference?: string;
+  backUrls?: { success?: string; failure?: string; pending?: string };
+  autoReturn?: string;
+}): Promise<{ success: boolean; preferenceId?: string; initPoint?: string; error?: string }> {
+  try {
+    const preferenceApi = new Preference(mpClient);
+    const body: any = {
+      items: params.items.map(i => ({
+        id: i.id,
+        title: i.title,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        currency_id: "MXN",
+      })),
+      back_urls: params.backUrls || {
+        success: "",
+        failure: "",
+        pending: "",
+      },
+      auto_return: params.autoReturn || "all",
+    };
+    if (params.payer) body.payer = params.payer;
+    if (params.externalReference) body.external_reference = params.externalReference;
+
+    const result = await preferenceApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
+
+    return {
+      success: true,
+      preferenceId: result.id,
+      initPoint: result.init_point,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.cause?.description || err?.message || "Error al crear preferencia" };
   }
 }
