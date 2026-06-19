@@ -98,40 +98,6 @@ export default function AdminContent() {
     localStorage.setItem("content_history", JSON.stringify(savedContent));
   }, [savedContent]);
 
-  // Sync server images into history
-  useEffect(() => {
-    if (activeTab !== "history") return;
-    fetch("/api/content/history-images")
-      .then(r => r.json())
-      .then((serverImages: string[]) => {
-        if (!Array.isArray(serverImages) || serverImages.length === 0) return;
-        setSavedContent(prev => {
-          let updated = [...prev];
-          let changed = false;
-          for (const img of serverImages) {
-            const alreadyExists = updated.some(item => item.images.includes(img));
-            if (!alreadyExists) {
-              const filename = img.split("/").pop() || "";
-              const parts = filename.replace(/\.(png|jpg|jpeg|webp)$/i, "").split("_");
-              const dateHint = parts.length >= 3 ? parts.slice(1).join("_") : "";
-              updated = [{
-                id: `server-${Date.now()}-${img}`,
-                caption: "",
-                date: new Date().toLocaleDateString("es-MX"),
-                images: [img],
-                copyType: "",
-                productName: `Generado: ${dateHint || filename}`,
-                aspectRatio: "1:1",
-              }, ...updated];
-              changed = true;
-            }
-          }
-          return changed ? updated.slice(0, 30) : prev;
-        });
-      })
-      .catch(() => {});
-  }, [activeTab]);
-
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
