@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function ResultadoPage() {
+function ResultadoContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [resultStatus, setResultStatus] = useState<"approved" | "pending" | "rejected" | "error">("pending");
@@ -13,14 +13,10 @@ export default function ResultadoPage() {
   useEffect(() => {
     const status = searchParams.get("status") || searchParams.get("collection_status");
     const paymentId = searchParams.get("payment_id");
-    const merchantOrderId = searchParams.get("merchant_order_id");
-    const prefId = searchParams.get("preference_id");
-    const extRef = searchParams.get("external_reference");
     const oid = searchParams.get("orderId");
 
     if (oid) setOrderId(oid);
 
-    // Map MP status to our status
     if (status === "approved") {
       setResultStatus("approved");
     } else if (status === "rejected" || status === "failure") {
@@ -29,7 +25,6 @@ export default function ResultadoPage() {
       setResultStatus("pending");
     }
 
-    // If we have a payment_id, update the order
     if (paymentId && oid) {
       fetch(`/api/orders/${oid}`, {
         method: "PATCH",
@@ -114,5 +109,17 @@ export default function ResultadoPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResultadoPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[var(--brand-bg)] flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
+      </div>
+    }>
+      <ResultadoContent />
+    </Suspense>
   );
 }
