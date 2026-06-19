@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     const payment = await getPayment(String(paymentId));
     if (!payment) {
-      return NextResponse.json({ ok: false, error: "Payment not found" }, { status: 404 });
+      return NextResponse.json({ ok: true, message: "Payment not found (test or invalid)" });
     }
 
     const order = getOrderByMpPaymentId(String(paymentId));
