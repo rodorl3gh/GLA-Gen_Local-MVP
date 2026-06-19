@@ -73,7 +73,7 @@ export async function createCardPayment(params: {
     const check = await mpRequest("GET", "/v1/payment_methods");
     console.log("[MP] Credential check GET /payment_methods → status:", check.status);
 
-    console.log("[MP] Creando pago con token de tarjeta:", params.token.slice(0, 10) + "...");
+    console.log("[MP] Creando pago — method:", params.paymentMethodId, "| amount:", params.amount, "| installments:", params.installments, "| token:", params.token.slice(0, 12) + "...");
 
     const { status, data } = await mpRequest("POST", "/v1/payments", body);
 

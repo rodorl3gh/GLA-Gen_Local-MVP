@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       email: payerEmail || "simulado@test.com",
       firstName: payerFirstName || clientName || "Cliente",
       lastName: payerLastName || "",
+      identification: { type: "DNI", number: "12345678" },
     };
 
     const description = items.map((i: any) => `${i.name} x${i.quantity}`).join(", ").slice(0, 250);
