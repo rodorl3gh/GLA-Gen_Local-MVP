@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CartItem } from "@/app/menu/page";
 
 interface Props {
@@ -30,18 +30,6 @@ interface TicketData {
   date: string;
 }
 
-declare global {
-  interface Window {
-    MercadoPago: any;
-  }
-}
-
-function getMpPublicKey(): string {
-  const mode = process.env.NEXT_PUBLIC_MP_MODE || "production";
-  return mode === "sandbox"
-    ? process.env.NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY || ""
-    : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "";
-}
 
 export default function CheckoutForm({ open, onClose, cart, total, tableNumber, onSuccess }: Props) {
   const [step, setStep] = useState(1);
@@ -55,12 +43,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [ticket, setTicket] = useState<TicketData | null>(null);
 
-  const [mpLoaded, setMpLoaded] = useState(false);
-  const [mpBrickLoading, setMpBrickLoading] = useState(false);
   const [cardError, setCardError] = useState(false);
-  const brickContainerRef = useRef<HTMLDivElement>(null);
-  const brickControllerRef = useRef<any>(null);
-  const isUnmountingRef = useRef(false);
 
   const simulatePayments = (process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS || "").trim() === "true";
 
@@ -84,140 +67,14 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       .catch(() => {});
   }, [open]);
 
-  const loadMpSdk = useCallback(() => {
-    const mpKey = getMpPublicKey();
-    if (!mpKey) {
-      setMpLoaded(false);
-      setError("Credenciales de Mercado Pago no configuradas. Revisa NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY en .env.local");
-      return;
-    }
-
-    if (document.querySelector('script[src="https://sdk.mercadopago.com/js/v2"]')) {
-      if (window.MercadoPago) { setMpLoaded(true); return; }
-      const checkExist = setInterval(() => {
-        if (window.MercadoPago) { setMpLoaded(true); clearInterval(checkExist); }
-      }, 100);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://sdk.mercadopago.com/js/v2";
-    script.async = true;
-    script.onload = () => {
-      const mpKey = getMpPublicKey();
-      if (mpKey && window.MercadoPago) new window.MercadoPago(mpKey, { locale: "es-MX" });
-      setMpLoaded(true);
-    };
-    script.onerror = () => setMpLoaded(false);
-    document.body.appendChild(script);
-  }, []);
-
-  useEffect(() => {
-    if (!open || !isMpCard || simulatePayments) return;
-    loadMpSdk();
-  }, [open, isMpCard, loadMpSdk, simulatePayments]);
-
-  const unmountBrick = useCallback(() => {
-    if (isUnmountingRef.current) return;
-    isUnmountingRef.current = true;
-    if (brickControllerRef.current) {
-      try { brickControllerRef.current.unmount(); } catch {}
-      brickControllerRef.current = null;
-    }
-    if (brickContainerRef.current) brickContainerRef.current.innerHTML = "";
-    isUnmountingRef.current = false;
-  }, []);
-
   useEffect(() => {
     if (!open) {
       setStep(1); setSent(false); setTicket(null);
       setPhone(tableNumber ? `Mesa ${tableNumber}` : "");
       setName(""); setNotes(""); setError("");
-      setMpLoaded(false); setMpBrickLoading(false);
       setCardError(false);
-      unmountBrick();
     }
-  }, [open, tableNumber, unmountBrick]);
-
-  useEffect(() => {
-    if (step !== 3 && isMpCard) {
-      unmountBrick();
-      setCardError(false);
-      setMpBrickLoading(false);
-    }
-  }, [step, isMpCard, unmountBrick]);
-
-  const renderCardBrick = useCallback(async () => {
-    if (!brickContainerRef.current || !window.MercadoPago || !mpLoaded) return;
-    const mpKey = getMpPublicKey();
-    if (!mpKey) return;
-    const mp = new window.MercadoPago(mpKey, { locale: "es-MX" });
-
-    unmountBrick();
-    brickControllerRef.current = null;
-
-    setMpBrickLoading(true);
-    setError("");
-    setCardError(false);
-
-    const bricksBuilder = mp.bricks();
-    const onSubmit = async (formData: any) => {
-      setSending(true);
-      setError("");
-      setCardError(false);
-      const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
-      try {
-        const res = await fetch("/api/mercadopago/process-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paymentType: "card",
-            token: formData.token || undefined,
-            paymentMethodId: formData.payment_method_id || undefined,
-            installments: formData.installments || 1,
-            issuerId: formData.issuer_id || undefined,
-            payerEmail: formData.payer?.email || `${name || "cliente"}@test.com`,
-            payerFirstName: formData.payer?.first_name || name || "Cliente",
-            payerLastName: formData.payer?.last_name || "",
-            items, total, notes: notes.trim(), phone: phone.trim(), clientName: name || "Anonimo",
-          }),
-        });
-        const data = await res.json();
-        if (data.success && data.orderId) {
-          setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
-          onSuccess(); setSent(true);
-        } else {
-          setError(data.error || "Error al procesar el pago");
-          setCardError(true);
-          unmountBrick();
-        }
-      } catch {
-        setError("Error de conexion. Intenta de nuevo.");
-        setCardError(true);
-        unmountBrick();
-      }
-      setSending(false);
-    };
-    try {
-      brickControllerRef.current = await bricksBuilder.create("cardPayment", brickContainerRef.current.id, {
-        initialization: { amount: total, payer: { firstName: name || "Cliente" } },
-        customization: { visual: { style: { theme: "default" }, hidePaymentButton: false }, paymentMethods: { maxInstallments: 6 } },
-        callbacks: { onSubmit, onError: (e: any) => { setMpBrickLoading(false); setError(e?.message || "Error al cargar formulario"); setCardError(true); }, onReady: () => setMpBrickLoading(false) },
-      });
-    } catch (e: any) { setMpBrickLoading(false); setError(e?.message || "Error al inicializar formulario"); setCardError(true); }
-  }, [mpLoaded, total, name, phone, notes, cart, onSuccess, unmountBrick]);
-
-  const retryCardPayment = useCallback(() => {
-    setError("");
-    setCardError(false);
-    renderCardBrick();
-  }, [renderCardBrick]);
-
-  useEffect(() => {
-    if (step === 3 && isMpCard && mpLoaded && brickContainerRef.current && open && !simulatePayments) {
-      const timer = setTimeout(() => renderCardBrick(), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [step, isMpCard, mpLoaded, open, renderCardBrick, simulatePayments]);
+  }, [open, tableNumber]);
 
   if (!open) return null;
 
@@ -250,6 +107,34 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       onSuccess();
     } catch {}
     setSending(false); setSent(true);
+  };
+
+  const handleCheckoutPro = async () => {
+    setSending(true); setError("");
+    const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
+    try {
+      const res = await fetch("/api/mercadopago/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items,
+          total,
+          phone: phone.trim(),
+          clientName: name || "Anonimo",
+          notes: notes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.initPoint) {
+        window.location.href = data.initPoint;
+      } else {
+        setError(data.error || "Error al conectar con MercadoPago");
+        setSending(false);
+      }
+    } catch {
+      setError("Error de conexion. Intenta de nuevo.");
+      setSending(false);
+    }
   };
 
   const handleSimulatedCardPayment = async () => {
@@ -450,23 +335,19 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                           )}
                         </div>
                       ) : (<>
-                      {mpBrickLoading && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Cargando formulario de pago...</span></div>)}
-                      {!mpLoaded && !mpBrickLoading && !error && (<div className="flex items-center justify-center py-8"><div className="animate-spin w-6 h-6 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="ml-2 text-xs text-[var(--brand-text-muted)]">Conectando con Mercado Pago...</span></div>)}
-                      {!mpLoaded && !mpBrickLoading && error && (<div className="p-3 bg-amber-50 border border-amber-200 rounded-xl"><p className="text-amber-700 text-xs font-medium mb-2">No se pudo conectar con Mercado Pago</p><p className="text-amber-600 text-[10px]">{error}</p></div>)}
-                      <div id="mp-brick-container" ref={brickContainerRef} className={`min-h-[200px] ${(!mpLoaded || cardError) ? "hidden" : ""}`} />
-                      {cardError && !mpBrickLoading && (
-                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3">
-                          {error && <p className="text-red-600 text-xs">{error}</p>}
-                          <p className="text-xs text-gray-600">Puedes intentar de nuevo con la misma tarjeta o cambiar el metodo de pago.</p>
-                          <button onClick={retryCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            Reintentar pago
-                          </button>
-                        </div>
+                      <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl">
+                        <p className="text-xs text-sky-700 font-medium mb-1">Pago seguro con MercadoPago</p>
+                        <p className="text-[10px] text-sky-600">Seras redirigido a la pagina de pago de MercadoPago para completar tu compra con tarjeta.</p>
+                      </div>
+                      {error && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
+                      {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Conectando con MercadoPago...</span></div>)}
+                      {!sending && (
+                        <button onClick={handleCheckoutPro} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                          Ir a pagar con MercadoPago
+                        </button>
                       )}
-                      {error && !cardError && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
-                      {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Procesando pago...</span></div>)}
-                      <button onClick={() => { setStep(2); setError(""); unmountBrick(); setCardError(false); }} className="btn-outline w-full py-3 text-sm font-medium">← Cambiar metodo de pago</button>
+                      <button onClick={() => { setStep(2); setError(""); }} className="btn-outline w-full py-3 text-sm font-medium">← Cambiar metodo de pago</button>
                       </>)}
                     </div>
                   ) : (
