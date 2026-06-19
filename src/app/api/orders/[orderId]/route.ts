@@ -35,6 +35,13 @@ export async function PATCH(
 
   // Update payment status
   if (body.payment_status) {
+    const order = getOrderById(Number(orderId));
+    if (!order) return NextResponse.json({ error: "Pedido no encontrado" }, { status: 404 });
+
+    if (order.payment_method === "Tarjeta") {
+      return NextResponse.json({ error: "El estado de pago de tarjeta solo se actualiza via webhook de Mercado Pago" }, { status: 403 });
+    }
+
     const ps = body.payment_status as string;
     if (!["pending", "approved", "rejected"].includes(ps)) {
       return NextResponse.json({ error: "Estado de pago invalido" }, { status: 400 });

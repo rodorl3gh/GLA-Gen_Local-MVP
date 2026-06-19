@@ -46,8 +46,10 @@ export async function GET(req: NextRequest) {
 
   const total = orders.length;
   const pendientes = orders.filter((o: any) => o.status === "pending").length;
+  const aprobados = orders.filter((o: any) => o.payment_status === "approved").length;
+  const rechazados = orders.filter((o: any) => o.payment_status === "rejected").length;
   const ingresos = orders
-    .filter((o: any) => o.status !== "cancelled")
+    .filter((o: any) => o.payment_status === "approved")
     .reduce((s: number, o: any) => s + Number(o.total), 0);
 
   const hoy = orders.filter(
@@ -57,13 +59,10 @@ export async function GET(req: NextRequest) {
   const ingresosHoy = orders
     .filter(
       (o: any) =>
-        o.status !== "cancelled" &&
+        o.payment_status === "approved" &&
         new Date(o.created_at).getTime() / 1000 >= todayStartTs
     )
     .reduce((s: number, o: any) => s + Number(o.total), 0);
-
-  const aprobados = orders.filter((o: any) => o.payment_status === "approved").length;
-  const rechazados = orders.filter((o: any) => o.payment_status === "rejected").length;
 
   return NextResponse.json({
     orders,

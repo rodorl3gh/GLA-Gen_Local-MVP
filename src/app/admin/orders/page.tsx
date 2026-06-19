@@ -193,6 +193,7 @@ export default function AdminOrders() {
   const renderListRow = (o: any) => {
     const s = STATUS[o.status] || STATUS.pending;
     const ps = PAYMENT_STATUS[o.payment_status] || null;
+    const isCard = o.payment_method === "Tarjeta";
     return (
       <div key={o.id} onClick={() => setSelected(o)}
         className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
@@ -213,9 +214,31 @@ export default function AdminOrders() {
           </svg>
           {o.phone || "\u2014"}
         </span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${s.cls}`}>{s.label}</span>
-        {ps && (
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span>
+        <select
+          value={o.status}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { e.stopPropagation(); changeStatus(o.id, e.target.value); }}
+          className={`text-[10px] px-2 py-1 rounded-full border font-medium shrink-0 cursor-pointer appearance-none text-center ${s.cls}`}
+          style={{ minWidth: "90px" }}>
+          {["pending","preparing","delivered","cancelled"].map(st => (
+            <option key={st} value={st}>{(STATUS as any)[st]?.label || st}</option>
+          ))}
+        </select>
+        {isCard ? (
+          ps ? <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span> : null
+        ) : (
+          <select
+            value={o.payment_status || "pending"}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); changePaymentStatus(o.id, e.target.value); }}
+            className={`text-[10px] px-2 py-1 rounded-full border font-medium shrink-0 cursor-pointer appearance-none text-center ${
+              (PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""
+            }`}
+            style={{ minWidth: "100px" }}>
+            <option value="pending">Pago Pendiente</option>
+            <option value="approved">Pago Aprobado</option>
+            <option value="rejected">Pago Rechazado</option>
+          </select>
         )}
         <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
         <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
@@ -491,21 +514,32 @@ export default function AdminOrders() {
 
                   <div className="border-t border-[var(--admin-border)] pt-3">
                     <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Estado del pago</p>
-                    <div className="space-y-1.5">
-                      {(["pending", "approved", "rejected"] as const).map(ps => {
-                        const info = PAYMENT_STATUS[ps];
-                        const isActive = (selected.payment_status || "pending") === ps;
-                        return (
-                          <button key={ps} onClick={() => changePaymentStatus(selected.id, ps)}
-                            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
-                              isActive ? `${info.cls} border-current shadow-sm` : "border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:border-[var(--admin-border-hover)]"
-                            }`}>
-                            <span className={`w-2 h-2 rounded-full ${ps === "approved" ? "bg-emerald-500" : ps === "rejected" ? "bg-red-500" : "bg-amber-500"}`} />
-                            {info.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {selected.payment_method === "Tarjeta" ? (
+                      <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                        <p className="text-[10px] text-[var(--admin-text-muted)] mb-1">Gestionado por Mercado Pago (webhook)</p>
+                        {PAYMENT_STATUS[selected.payment_status] && (
+                          <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${PAYMENT_STATUS[selected.payment_status].cls}`}>
+                            {PAYMENT_STATUS[selected.payment_status].label}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(["pending", "approved", "rejected"] as const).map(ps => {
+                          const info = PAYMENT_STATUS[ps];
+                          const isActive = (selected.payment_status || "pending") === ps;
+                          return (
+                            <button key={ps} onClick={() => changePaymentStatus(selected.id, ps)}
+                              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
+                                isActive ? `${info.cls} border-current shadow-sm` : "border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:border-[var(--admin-border-hover)]"
+                              }`}>
+                              <span className={`w-2 h-2 rounded-full ${ps === "approved" ? "bg-emerald-500" : ps === "rejected" ? "bg-red-500" : "bg-amber-500"}`} />
+                              {info.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
