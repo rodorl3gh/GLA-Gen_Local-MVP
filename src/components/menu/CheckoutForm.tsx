@@ -62,7 +62,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const brickControllerRef = useRef<any>(null);
   const isUnmountingRef = useRef(false);
 
-  const simulatePayments = process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS === "true" || process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS === "1";
+  const simulatePayments = (process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS || "").trim() === "true";
 
   const isMpCard = payment === "Tarjeta";
   const selectedMethod = useMemo(() =>
