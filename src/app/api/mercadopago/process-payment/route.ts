@@ -93,6 +93,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: mpResult.error }, { status: 400 });
     }
 
+    if (mpResult.status === "rejected") {
+      return NextResponse.json({
+        success: false,
+        error: `Pago rechazado: ${mpResult.statusDetail || "motivo desconocido"}. Intenta con otra tarjeta.`,
+        mpStatus: mpResult.status,
+        mpStatusDetail: mpResult.statusDetail,
+      }, { status: 400 });
+    }
+
     const paymentStatus = mpResult.status === "approved" ? "approved" : "pending";
     const paymentMethodLabel = paymentType === "card" ? "Tarjeta" : "Transferencia";
 
