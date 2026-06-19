@@ -46,6 +46,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const [cardError, setCardError] = useState(false);
 
   const simulatePayments = (process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS || "").trim() === "true";
+  if (typeof window !== "undefined") console.log("[Checkout] NEXT_PUBLIC_SIMULATE_PAYMENTS =", JSON.stringify(process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS), "→ simulatePayments =", simulatePayments);
 
   const isMpCard = payment === "Tarjeta";
   const selectedMethod = useMemo(() =>
