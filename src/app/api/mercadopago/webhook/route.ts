@@ -1,22 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import { updateOrderPayment, getOrderByMpPaymentId } from "@/lib/db";
 import { notifyOwnerNewOrder } from "@/lib/notify-owner";
 
-const MP_MODE = process.env.MP_MODE || "production";
-const MP_ACCESS_TOKEN = MP_MODE === "sandbox"
-  ? (process.env.MERCADOPAGO_SANDBOX_ACCESS_TOKEN || "")
-  : (process.env.MERCADOPAGO_ACCESS_TOKEN || "");
+const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
 
 const mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
 const paymentApi = new Payment(mpClient);
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
     const { action, data, type } = body;
 
-    console.log("[Webhook] Recibido:", type || action, "| data:", JSON.stringify(data));
+    console.log("[Webhook POST] type:", type || action, "| data:", JSON.stringify(data));
+
+    if (!action && !type) {
+      return NextResponse.json({ ok: true, message: "Empty notification" });
+    }
 
     switch (action || type) {
       case "payment.updated":
@@ -67,14 +74,46 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, message: "Point integration notif received" });
 
       default:
-        return NextResponse.json({ ok: true, message: `Action ${action || type} not handled` });
+        return NextResponse.json({ ok: true, message: `Notification ${action || type} received` });
     }
   } catch (err: any) {
-    console.error("[Webhook] Error:", err?.message || err);
-    return NextResponse.json({ ok: false, error: err.message || "Error" }, { status: 500 });
+    return NextResponse.json({ ok: true, message: err?.message || "Error" });
   }
 }
 
-export async function GET() {
-  return NextResponse.json({ ok: true, message: "Webhook de Mercado Pago activo" });
+export async function GET(req: NextRequest) {
+  const topic = req.nextUrl.searchParams.get("topic");
+  const paymentId = req.nextUrl.searchParams.get("id");
+
+  console.log("[Webhook GET] topic:", topic, "| id:", paymentId);
+
+  if (topic === "payment" && paymentId) {
+    try {
+      const payment = await paymentApi.get({ id: paymentId }).catch(() => null);
+      if (payment) {
+        const order = getOrderByMpPaymentId(paymentId);
+        if (order) {
+          const mpStatus = payment.status === "approved" ? "approved"
+            : payment.status === "rejected" ? "rejected"
+            : payment.status === "cancelled" ? "rejected"
+            : payment.status === "refunded" ? "refunded"
+            : "pending";
+
+          updateOrderPayment(order.id, paymentId, mpStatus, payment);
+
+          if (mpStatus === "approved" && order.payment_status !== "approved") {
+            try { await notifyOwnerNewOrder(order.id, "Cafeteria Luna Test"); } catch {}
+          }
+
+          return NextResponse.json({ ok: true, orderId: order.id, paymentStatus: mpStatus });
+        }
+      }
+      // Always return 200, even if order not found (MP test notification)
+      return NextResponse.json({ ok: true });
+    } catch {
+      return NextResponse.json({ ok: true });
+    }
+  }
+
+  return NextResponse.json({ ok: true });
 }
