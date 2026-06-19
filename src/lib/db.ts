@@ -147,6 +147,11 @@ function runMigrations(db: Database.Database) {
   try { db.exec(`ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'`); } catch {}
   try { db.exec(`ALTER TABLE orders ADD COLUMN mp_payment_data TEXT DEFAULT '{}'`); } catch {}
 
+  // Migration: add Mercado Pago columns to orders
+  try { db.exec(`ALTER TABLE orders ADD COLUMN mp_payment_id TEXT DEFAULT ''`); } catch {}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending'`); } catch {}
+  try { db.exec(`ALTER TABLE orders ADD COLUMN mp_payment_data TEXT DEFAULT '{}'`); } catch {}
+
   seedDefaults(db);
 
   // Migration: update existing promos with proper config (idempotent — only updates rows with empty config)

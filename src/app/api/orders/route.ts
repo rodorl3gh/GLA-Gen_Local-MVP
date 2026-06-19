@@ -14,9 +14,12 @@ export async function GET(req: NextRequest) {
   const todayStartTs = Math.floor(todayStart.getTime() / 1000);
 
   // Auto-expire orders older than 24h that are still pending/preparing
-  db.prepare(
-    `UPDATE orders SET status = 'expirado' WHERE status IN ('pending','preparing') AND created_at < ?`
-  ).run(twentyFourHoursAgo);
+  // Try-catch: deployed DBs may lack 'expirado' in CHECK constraint
+  try {
+    db.prepare(
+      `UPDATE orders SET status = 'expirado' WHERE status IN ('pending','preparing') AND created_at < ?`
+    ).run(twentyFourHoursAgo);
+  } catch {}
 
   let fromTs = todayStartTs;
   if (from) {
