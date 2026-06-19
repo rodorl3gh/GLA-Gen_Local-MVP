@@ -268,9 +268,9 @@ export default function AdminOrders() {
           <select
             value={o.status}
             onChange={(e) => changeStatus(o.id, e.target.value)}
-            className="text-[10px] px-2 py-1 w-full rounded-full border border-[var(--admin-border)] font-medium cursor-pointer bg-[var(--admin-bg-input)] text-[var(--admin-text)] text-center">
+            className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${s.cls}`}>
             {["pending","preparing","delivered","cancelled"].map(st => (
-              <option key={st} value={st}>{(STATUS as any)[st]?.label || st}</option>
+              <option key={st} value={st} className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">{(STATUS as any)[st]?.label || st}</option>
             ))}
           </select>
         </div>
@@ -281,10 +281,10 @@ export default function AdminOrders() {
             <select
               value={o.payment_status || "pending"}
               onChange={(e) => changePaymentStatus(o.id, e.target.value)}
-              className="text-[10px] px-2 py-1 w-full rounded-full border border-[var(--admin-border)] font-medium cursor-pointer bg-[var(--admin-bg-input)] text-[var(--admin-text)] text-center">
-              <option value="pending">Pago Pendiente</option>
-              <option value="approved">Pago Aprobado</option>
-              <option value="rejected">Pago Rechazado</option>
+              className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${(PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""}`}>
+              <option value="pending" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Pendiente</option>
+              <option value="approved" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Aprobado</option>
+              <option value="rejected" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Rechazado</option>
             </select>
           </div>
         )}
