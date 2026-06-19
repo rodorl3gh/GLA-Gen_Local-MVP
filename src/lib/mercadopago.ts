@@ -67,7 +67,13 @@ export async function createCardPayment(params: {
     if (params.issuerId) body.issuer_id = params.issuerId;
     if (params.externalReference) body.external_reference = params.externalReference;
 
+    console.log("[MP] Modo:", MP_MODE, "| Token:", MP_ACCESS_TOKEN.slice(0, 15) + "...");
+    console.log("[MP] Creando pago con token de tarjeta:", params.token.slice(0, 10) + "...");
+
     const { status, data } = await mpRequest("POST", "/v1/payments", body);
+
+    console.log("[MP] Respuesta API — status:", status, "| id:", data?.id, "| status:", data?.status, "| detail:", data?.status_detail);
+    if (!data?.id) console.log("[MP] Error completo:", JSON.stringify(data));
 
     if (status === 201 || status === 200) {
       return {
