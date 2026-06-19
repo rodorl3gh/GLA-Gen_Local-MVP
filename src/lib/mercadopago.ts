@@ -1,8 +1,15 @@
+import { MercadoPagoConfig, Payment } from "mercadopago";
+
 const MP_MODE = process.env.MP_MODE || "production";
 const MP_ACCESS_TOKEN = MP_MODE === "sandbox"
   ? (process.env.MERCADOPAGO_SANDBOX_ACCESS_TOKEN || "")
   : (process.env.MERCADOPAGO_ACCESS_TOKEN || "");
-const MP_API_BASE = "https://api.mercadopago.com";
+
+const mpClient = new MercadoPagoConfig({
+  accessToken: MP_ACCESS_TOKEN,
+});
+
+const paymentApi = new Payment(mpClient);
 
 interface MpPaymentResult {
   success: boolean;
@@ -12,26 +19,6 @@ interface MpPaymentResult {
   paymentMethodId?: string;
   paymentData?: any;
   error?: string;
-}
-
-async function mpRequest(method: string, path: string, body?: any): Promise<any> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${MP_ACCESS_TOKEN}`,
-  };
-
-  if (method !== "GET") {
-    headers["X-Idempotency-Key"] = crypto.randomUUID();
-  }
-
-  const res = await fetch(`${MP_API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json();
-  return { status: res.status, data };
 }
 
 export async function createCardPayment(params: {
@@ -67,36 +54,35 @@ export async function createCardPayment(params: {
     if (params.issuerId) body.issuer_id = params.issuerId;
     if (params.externalReference) body.external_reference = params.externalReference;
 
-    console.log("[MP] Modo:", MP_MODE, "| Token len:", MP_ACCESS_TOKEN.length, "| Token ends:", "..." + MP_ACCESS_TOKEN.slice(-15));
+    console.log("[MP SDK] Modo:", MP_MODE, "| Token ends:", "..." + MP_ACCESS_TOKEN.slice(-15));
+    console.log("[MP SDK] Creando pago — method:", params.paymentMethodId, "| amount:", params.amount, "| installments:", params.installments, "| token:", params.token.slice(0, 12) + "...");
 
-    // Quick credential check
-    const check = await mpRequest("GET", "/v1/payment_methods");
-    console.log("[MP] Credential check GET /payment_methods → status:", check.status);
+    const result = await paymentApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
 
-    console.log("[MP] Creando pago — method:", params.paymentMethodId, "| amount:", params.amount, "| installments:", params.installments, "| token:", params.token.slice(0, 12) + "...");
+    console.log("[MP SDK] Respuesta — id:", result.id, "| status:", result.status, "| detail:", result.status_detail);
 
-    const { status, data } = await mpRequest("POST", "/v1/payments", body);
-
-    console.log("[MP] Respuesta API — status:", status, "| id:", data?.id, "| status:", data?.status, "| detail:", data?.status_detail);
-    if (!data?.id) console.log("[MP] Error completo:", JSON.stringify(data));
-
-    if (status === 201 || status === 200) {
+    if (result.id) {
       return {
         success: true,
-        paymentId: String(data.id),
-        status: data.status,
-        statusDetail: data.status_detail,
-        paymentMethodId: data.payment_method_id,
-        paymentData: data,
+        paymentId: String(result.id),
+        status: result.status,
+        statusDetail: result.status_detail,
+        paymentMethodId: result.payment_method_id,
+        paymentData: result,
       };
     }
 
     return {
       success: false,
-      error: data.message || data.cause?.[0]?.description || "Error al procesar el pago",
+      error: "Error al procesar el pago",
     };
   } catch (err: any) {
-    return { success: false, error: err.message || "Error de conexion con Mercado Pago" };
+    const mpError = err?.cause || err;
+    console.error("[MP SDK] Error:", mpError?.message || err?.message || err);
+    return {
+      success: false,
+      error: mpError?.description || mpError?.message || err?.message || "Error de conexion con Mercado Pago",
+    };
   }
 }
 
@@ -127,33 +113,36 @@ export async function createBankTransferPayment(params: {
 
     if (params.externalReference) body.external_reference = params.externalReference;
 
-    const { status, data } = await mpRequest("POST", "/v1/payments", body);
+    const result = await paymentApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
 
-    if (status === 201 || status === 200) {
+    if (result.id) {
       return {
         success: true,
-        paymentId: String(data.id),
-        status: data.status,
-        statusDetail: data.status_detail,
+        paymentId: String(result.id),
+        status: result.status,
+        statusDetail: result.status_detail,
         paymentMethodId: "spei",
-        paymentData: data,
+        paymentData: result,
       };
     }
 
     return {
       success: false,
-      error: data.message || data.cause?.[0]?.description || "Error al generar la transferencia",
+      error: "Error al generar la transferencia",
     };
   } catch (err: any) {
-    return { success: false, error: err.message || "Error de conexion con Mercado Pago" };
+    const mpError = err?.cause || err;
+    return {
+      success: false,
+      error: mpError?.description || mpError?.message || err?.message || "Error de conexion con Mercado Pago",
+    };
   }
 }
 
 export async function getPayment(paymentId: string): Promise<any> {
   try {
-    const { status, data } = await mpRequest("GET", `/v1/payments/${paymentId}`);
-    if (status === 200) return data;
-    return null;
+    const result = await paymentApi.get({ id: paymentId });
+    return result;
   } catch {
     return null;
   }
@@ -161,9 +150,11 @@ export async function getPayment(paymentId: string): Promise<any> {
 
 export async function getPaymentMethods(): Promise<any[]> {
   try {
-    const { status, data } = await mpRequest("GET", "/v1/payment_methods");
-    if (status === 200) return Array.isArray(data) ? data : [];
-    return [];
+    const { MercadoPagoConfig, PaymentMethod } = await import("mercadopago");
+    const pmClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
+    const pmApi = new PaymentMethod(pmClient);
+    const result = await pmApi.get();
+    return Array.isArray(result) ? result : [];
   } catch {
     return [];
   }
