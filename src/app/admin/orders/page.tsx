@@ -214,31 +214,31 @@ export default function AdminOrders() {
           </svg>
           {o.phone || "\u2014"}
         </span>
-        <select
-          value={o.status}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { e.stopPropagation(); changeStatus(o.id, e.target.value); }}
-          className={`text-[10px] px-2 py-1 rounded-full border font-medium shrink-0 cursor-pointer appearance-none text-center ${s.cls}`}
-          style={{ minWidth: "90px" }}>
-          {["pending","preparing","delivered","cancelled"].map(st => (
-            <option key={st} value={st}>{(STATUS as any)[st]?.label || st}</option>
-          ))}
-        </select>
+        <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "90px" }}>
+          <select
+            value={o.status}
+            onChange={(e) => changeStatus(o.id, e.target.value)}
+            className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer appearance-none text-center ${s.cls}`}>
+            {["pending","preparing","delivered","cancelled"].map(st => (
+              <option key={st} value={st}>{(STATUS as any)[st]?.label || st}</option>
+            ))}
+          </select>
+        </div>
         {isCard ? (
           ps ? <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span> : null
         ) : (
-          <select
-            value={o.payment_status || "pending"}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => { e.stopPropagation(); changePaymentStatus(o.id, e.target.value); }}
-            className={`text-[10px] px-2 py-1 rounded-full border font-medium shrink-0 cursor-pointer appearance-none text-center ${
-              (PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""
-            }`}
-            style={{ minWidth: "100px" }}>
-            <option value="pending">Pago Pendiente</option>
-            <option value="approved">Pago Aprobado</option>
-            <option value="rejected">Pago Rechazado</option>
-          </select>
+          <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "100px" }}>
+            <select
+              value={o.payment_status || "pending"}
+              onChange={(e) => changePaymentStatus(o.id, e.target.value)}
+              className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer appearance-none text-center ${
+                (PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""
+              }`}>
+              <option value="pending">Pago Pendiente</option>
+              <option value="approved">Pago Aprobado</option>
+              <option value="rejected">Pago Rechazado</option>
+            </select>
+          </div>
         )}
         <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
         <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
@@ -370,8 +370,9 @@ export default function AdminOrders() {
                 <div className="flex items-center gap-4 px-4 py-2 text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">
                   <span className="w-16 shrink-0">#ID</span>
                   <span className="flex-1">Productos</span>
-                  <span className="shrink-0">Estado</span>
-                  <span className="shrink-0">Pago</span>
+                  <span className="shrink-0 w-20">Tel</span>
+                  <span className="shrink-0 text-center" style={{ width: "90px" }}>Estado</span>
+                  <span className="shrink-0 text-center" style={{ width: "100px" }}>Pago</span>
                   <span className="shrink-0 w-16 text-right">Total</span>
                   <span className="shrink-0 w-20 text-right">Tiempo</span>
                 </div>
