@@ -531,6 +531,12 @@ export function updateOrderPayment(orderId: number, mpPaymentId: string, payment
     .run(mpPaymentId, paymentStatus, JSON.stringify(mpPaymentData ?? {}), orderId);
 }
 
+export function updatePaymentStatus(orderId: number, paymentStatus: string) {
+  getDb()
+    .prepare("UPDATE orders SET payment_status = ? WHERE id = ?")
+    .run(paymentStatus, orderId);
+}
+
 export function getOrderByMpPaymentId(mpPaymentId: string): any {
   const order = getDb().prepare("SELECT * FROM orders WHERE mp_payment_id = ?").get(mpPaymentId) as any;
   if (!order) return null;

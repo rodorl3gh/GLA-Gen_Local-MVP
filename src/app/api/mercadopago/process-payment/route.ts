@@ -38,7 +38,10 @@ export async function POST(req: Request) {
     };
 
     const description = items.map((i: any) => `${i.name} x${i.quantity}`).join(", ").slice(0, 250);
-    const orderPhone = phone || clientName || "Cliente";
+    const orderPhone = `${clientName || "Cliente"} - ${phone || ""}`.trim();
+    if (orderPhone === "Cliente -") {
+      return NextResponse.json({ success: false, error: "Telefono requerido" }, { status: 400 });
+    }
 
     if (simulate) {
       const paymentMethodLabel = paymentType === "card" ? "Tarjeta" : paymentType === "transfer" ? "Transferencia" : "Efectivo";

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getOrderById, updateOrderStatus } from "@/lib/db";
+import { getOrderById, updateOrderStatus, updatePaymentStatus } from "@/lib/db";
 import { notifyOwnerStatusChange } from "@/lib/notify-owner";
 import { notifyClientStatusChange } from "@/lib/notify-client";
 
@@ -19,21 +19,29 @@ export async function PATCH(
   { params }: { params: Promise<{ orderId: string }> }
 ) {
   const { orderId } = await params;
-  const { status } = (await req.json()) as {
-    status: "pending" | "preparing" | "delivered" | "cancelled" | "expirado";
-  };
+  const body = await req.json();
 
-  if (!["pending", "preparing", "delivered", "cancelled", "expirado"].includes(status)) {
-    return NextResponse.json({ error: "Estado invalido" }, { status: 400 });
+  // Update order status
+  if (body.status) {
+    const status = body.status as string;
+    if (!["pending", "preparing", "delivered", "cancelled", "expirado"].includes(status)) {
+      return NextResponse.json({ error: "Estado de pedido invalido" }, { status: 400 });
+    }
+    updateOrderStatus(Number(orderId), status as any);
+    try { await notifyOwnerStatusChange(Number(orderId), status, "Cafeteria Luna Test"); } catch {}
+    try { await notifyClientStatusChange(Number(orderId)); } catch {}
+    return NextResponse.json({ success: true, status });
   }
 
-  updateOrderStatus(Number(orderId), status);
+  // Update payment status
+  if (body.payment_status) {
+    const ps = body.payment_status as string;
+    if (!["pending", "approved", "rejected"].includes(ps)) {
+      return NextResponse.json({ error: "Estado de pago invalido" }, { status: 400 });
+    }
+    updatePaymentStatus(Number(orderId), ps);
+    return NextResponse.json({ success: true, payment_status: ps });
+  }
 
-  // Notificar al dueño del cambio de estado
-  try { await notifyOwnerStatusChange(Number(orderId), status, "Cafeteria Luna Test"); } catch {}
-
-  // Notificar al cliente si su pedido está listo o preparándose
-  try { await notifyClientStatusChange(Number(orderId)); } catch {}
-
-  return NextResponse.json({ success: true, status });
+  return NextResponse.json({ error: "status o payment_status requerido" }, { status: 400 });
 }

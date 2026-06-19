@@ -128,6 +128,17 @@ export default function AdminOrders() {
     if (selected?.id === orderId) setSelected((prev: any) => prev ? { ...prev, status } : null);
   };
 
+  const changePaymentStatus = async (orderId: number, paymentStatus: string) => {
+    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: paymentStatus } : o));
+    await fetch(`/api/orders/${orderId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payment_status: paymentStatus }),
+    });
+    fetchOrders();
+    if (selected?.id === orderId) setSelected((prev: any) => prev ? { ...prev, payment_status: paymentStatus } : null);
+  };
+
   const handleDragStart = (e: React.DragEvent, orderId: number) => {
     setDraggedOrderId(orderId);
     e.dataTransfer.effectAllowed = "move";
@@ -477,6 +488,25 @@ export default function AdminOrders() {
                       <p className="text-xs text-[var(--admin-text-secondary)]">{selected.notes}</p>
                     </div>
                   )}
+
+                  <div className="border-t border-[var(--admin-border)] pt-3">
+                    <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Estado del pago</p>
+                    <div className="space-y-1.5">
+                      {(["pending", "approved", "rejected"] as const).map(ps => {
+                        const info = PAYMENT_STATUS[ps];
+                        const isActive = (selected.payment_status || "pending") === ps;
+                        return (
+                          <button key={ps} onClick={() => changePaymentStatus(selected.id, ps)}
+                            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
+                              isActive ? `${info.cls} border-current shadow-sm` : "border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:border-[var(--admin-border-hover)]"
+                            }`}>
+                            <span className={`w-2 h-2 rounded-full ${ps === "approved" ? "bg-emerald-500" : ps === "rejected" ? "bg-red-500" : "bg-amber-500"}`} />
+                            {info.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
