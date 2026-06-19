@@ -118,25 +118,75 @@ export default function AdminOrders() {
   };
 
   const changeStatus = async (orderId: number, status: string) => {
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+    const order = orders.find(o => o.id === orderId);
+    setOrders((prev) => prev.map((o) => {
+      if (o.id !== orderId) return o;
+      const updates: any = { ...o, status };
+      if (status === "delivered" || status === "expirado") updates.payment_status = status === "expirado" ? "rejected" : "approved";
+      if (status === "cancelled") updates.payment_status = "rejected";
+      if (status === "pending") updates.payment_status = "pending";
+      return updates;
+    }));
     await fetch(`/api/orders/${orderId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    // Auto-sync payment status if needed
+    if (status === "delivered" || status === "expirado") {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_status: status === "expirado" ? "rejected" : "approved" }),
+      });
+    } else if (status === "cancelled") {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_status: "rejected" }),
+      });
+    } else if (status === "pending") {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_status: "pending" }),
+      });
+    }
     fetchOrders();
-    if (selected?.id === orderId) setSelected((prev: any) => prev ? { ...prev, status } : null);
+    if (selected?.id === orderId) {
+      const newPs = status === "delivered" ? "approved" : status === "cancelled" || status === "expirado" ? "rejected" : status === "pending" ? "pending" : order?.payment_status;
+      setSelected((prev: any) => prev ? { ...prev, status, payment_status: newPs } : null);
+    }
   };
 
   const changePaymentStatus = async (orderId: number, paymentStatus: string) => {
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, payment_status: paymentStatus } : o));
+    setOrders((prev) => prev.map((o) => {
+      if (o.id !== orderId) return o;
+      const updates: any = { ...o, payment_status: paymentStatus };
+      if (paymentStatus === "approved") updates.status = "delivered";
+      else if (paymentStatus === "rejected") updates.status = "cancelled";
+      else if (paymentStatus === "pending") updates.status = "pending";
+      return updates;
+    }));
     await fetch(`/api/orders/${orderId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ payment_status: paymentStatus }),
     });
+    // Auto-sync order status
+    if (paymentStatus === "approved" || paymentStatus === "rejected" || paymentStatus === "pending") {
+      const newStatus = paymentStatus === "approved" ? "delivered" : paymentStatus === "rejected" ? "cancelled" : "pending";
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    }
     fetchOrders();
-    if (selected?.id === orderId) setSelected((prev: any) => prev ? { ...prev, payment_status: paymentStatus } : null);
+    if (selected?.id === orderId) {
+      const newSt = paymentStatus === "approved" ? "delivered" : paymentStatus === "rejected" ? "cancelled" : paymentStatus === "pending" ? "pending" : undefined;
+      setSelected((prev: any) => prev ? { ...prev, payment_status: paymentStatus, ...(newSt ? { status: newSt } : {}) } : null);
+    }
   };
 
   const handleDragStart = (e: React.DragEvent, orderId: number) => {
@@ -218,7 +268,7 @@ export default function AdminOrders() {
           <select
             value={o.status}
             onChange={(e) => changeStatus(o.id, e.target.value)}
-            className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer appearance-none text-center ${s.cls}`}>
+            className="text-[10px] px-2 py-1 w-full rounded-full border border-[var(--admin-border)] font-medium cursor-pointer bg-[var(--admin-bg-input)] text-[var(--admin-text)] text-center">
             {["pending","preparing","delivered","cancelled"].map(st => (
               <option key={st} value={st}>{(STATUS as any)[st]?.label || st}</option>
             ))}
@@ -231,9 +281,7 @@ export default function AdminOrders() {
             <select
               value={o.payment_status || "pending"}
               onChange={(e) => changePaymentStatus(o.id, e.target.value)}
-              className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer appearance-none text-center ${
-                (PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""
-              }`}>
+              className="text-[10px] px-2 py-1 w-full rounded-full border border-[var(--admin-border)] font-medium cursor-pointer bg-[var(--admin-bg-input)] text-[var(--admin-text)] text-center">
               <option value="pending">Pago Pendiente</option>
               <option value="approved">Pago Aprobado</option>
               <option value="rejected">Pago Rechazado</option>
