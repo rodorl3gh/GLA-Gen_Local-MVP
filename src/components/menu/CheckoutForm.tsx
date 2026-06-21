@@ -99,7 +99,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     }
   }, [open, tableNumber]);
 
-  // Render MP CardForm brick when ready and on step 3
+  // Render MP CardPayment brick when ready and on step 3
   useEffect(() => {
     if (!mpReady) return;
     if (!isMpCard || simulatePayments) return;
@@ -108,7 +108,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     if (!cardFormContainerRef.current) return;
     if (cardFormRef.current) return;
 
-    console.log("[Checkout] Creating CardForm brick | publicKey:", mpPublicKey ? `${mpPublicKey.slice(0, 12)}...` : "EMPTY", "| amount:", total);
+    console.log("[Checkout] Creating CardPayment brick | publicKey:", mpPublicKey ? `${mpPublicKey.slice(0, 12)}...` : "EMPTY", "| amount:", total);
 
     if (!mpPublicKey) {
       setError("Error: clave publica de MercadoPago no configurada.");
@@ -117,9 +117,12 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
     const mp = new window.MercadoPago(mpPublicKey, { locale: "es-MX" });
 
-    mp.bricks().create("cardForm", cardFormContainerRef.current, {
+    mp.bricks().create("cardPayment", cardFormContainerRef.current, {
       initialization: {
         amount: total,
+        payer: {
+          email: "cliente@correo.com",
+        },
       },
       customization: {
         visual: {
@@ -129,29 +132,21 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
         },
       },
       callbacks: {
-        onFormMounted: (error: any) => {
-          if (error) {
-            console.error("[Checkout] CardForm mount error:", error);
-            setError("Error al cargar el formulario de tarjeta. Verifica tu conexion.");
-          } else {
-            console.log("[Checkout] CardForm mounted successfully");
-          }
+        onReady: () => {
+          console.log("[Checkout] CardPayment brick ready");
         },
         onSubmit: async (formData: any) => {
           return await handleCardPayment(formData);
         },
-        onValidityChange: (error: any) => {
-          // Called when form validity changes
-        },
         onError: (error: any) => {
-          console.error("[Checkout] CardForm error:", error);
+          console.error("[Checkout] CardPayment error:", error);
         },
       },
     }).then((brick: any) => {
-      console.log("[Checkout] CardForm brick created");
+      console.log("[Checkout] CardPayment brick created");
       cardFormRef.current = brick;
     }).catch((e: any) => {
-      console.error("[Checkout] CardForm brick creation failed:", e);
+      console.error("[Checkout] CardPayment brick creation failed:", e);
       setError("Error al cargar el formulario de pago. Intenta de nuevo.");
     });
   }, [mpReady, step, isMpCard, simulatePayments, sending]);
