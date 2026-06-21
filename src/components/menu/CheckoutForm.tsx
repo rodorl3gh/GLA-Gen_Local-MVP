@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
-import { loadMercadoPago } from "@mercadopago/sdk-js";
+import { useState, useEffect, useMemo } from "react";
 import { CartItem } from "@/app/menu/page";
 
 interface Props {
@@ -22,6 +21,7 @@ interface PaymentMethod {
 
 interface TicketData {
   orderId: number;
+  ref: string;
   clientName: string;
   clientPhone: string;
   payment: string;
@@ -29,12 +29,6 @@ interface TicketData {
   items: CartItem[];
   total: number;
   date: string;
-}
-
-declare global {
-  interface Window {
-    MercadoPago?: any;
-  }
 }
 
 export default function CheckoutForm({ open, onClose, cart, total, tableNumber, onSuccess }: Props) {
@@ -48,20 +42,8 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const [error, setError] = useState("");
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [ticket, setTicket] = useState<TicketData | null>(null);
-  const [cardError, setCardError] = useState(false);
-  const [mpReady, setMpReady] = useState(false);
-  const [brickFailed, setBrickFailed] = useState(false);
-  const cardFormRef = useRef<any>(null);
-  const cardFormContainerRef = useRef<HTMLDivElement>(null);
-
-  // Manual card form state (fallback)
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardName, setCardName] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCvv] = useState("");
 
   const simulatePayments = (process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS || "").trim() === "true";
-  const mpPublicKey = (process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "").trim();
 
   const isMpCard = payment === "Tarjeta";
   const selectedMethod = useMemo(() =>
@@ -69,18 +51,6 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     [paymentMethods, payment]
   );
 
-  // Load MercadoPago SDK via npm package
-  useEffect(() => {
-    if (!isMpCard || simulatePayments) return;
-    if (window.MercadoPago) { console.log("[Checkout] MP SDK already loaded"); setMpReady(true); return; }
-
-    console.log("[Checkout] Loading MP SDK...");
-    loadMercadoPago()
-      .then(() => { console.log("[Checkout] MP SDK loaded successfully"); setMpReady(true); })
-      .catch((e) => console.warn("[Checkout] MP SDK failed to load:", e));
-  }, [isMpCard, simulatePayments]);
-
-  // Load payment methods
   useEffect(() => {
     if (!open) return;
     fetch("/api/payments")
@@ -95,72 +65,13 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       .catch(() => {});
   }, [open]);
 
-  // Reset state when modal opens/closes
   useEffect(() => {
     if (!open) {
       setStep(1); setSent(false); setTicket(null);
       setPhone(tableNumber ? `Mesa ${tableNumber}` : "");
       setName(""); setNotes(""); setError("");
-      setCardError(false); setMpReady(false); setBrickFailed(false);
-      setCardNumber(""); setCardName(""); setCardExpiry(""); setCvv("");
-      cardFormRef.current = null;
     }
   }, [open, tableNumber]);
-
-  // Render MP CardPayment brick when ready and on step 3
-  useEffect(() => {
-    if (!mpReady) return;
-    if (!isMpCard || simulatePayments) return;
-    if (step !== 3) return;
-    if (sending) return;
-    if (!cardFormContainerRef.current) return;
-    if (cardFormRef.current || brickFailed) return;
-
-    console.log("[Checkout] Creating CardPayment brick | publicKey:", mpPublicKey ? `${mpPublicKey.slice(0, 12)}...` : "EMPTY", "| amount:", total);
-
-    if (!mpPublicKey) {
-      setError("Error: clave publica de MercadoPago no configurada.");
-      setBrickFailed(true);
-      return;
-    }
-
-    try {
-      const mp = new window.MercadoPago(mpPublicKey, { locale: "es-MX" });
-      const safeAmount = Number(total) || 1;
-
-      mp.bricks().create("cardPayment", cardFormContainerRef.current, {
-        initialization: {
-          amount: safeAmount,
-          payer: { email: "cliente@correo.com" },
-        },
-        customization: {
-          visual: { hidePaymentButton: true },
-        },
-        callbacks: {
-          onReady: () => {
-            console.log("[Checkout] CardPayment brick ready");
-          },
-          onSubmit: async (formData: any) => {
-            return await handleCardPayment(formData);
-          },
-          onError: (error: any) => {
-            console.error("[Checkout] CardPayment error:", error);
-          },
-        },
-      }).then((brick: any) => {
-        console.log("[Checkout] CardPayment brick created");
-        cardFormRef.current = brick;
-      }).catch((e: any) => {
-        console.error("[Checkout] CardPayment brick failed:", e?.message || e);
-        setBrickFailed(true);
-        setError(`Brick no disponible: ${e?.message || "error desconocido"}. Usa el formulario manual.`);
-      });
-    } catch (e: any) {
-      console.error("[Checkout] Brick init error:", e?.message || e);
-      setBrickFailed(true);
-      setError(`Error SDK: ${e?.message || "desconocido"}. Usa el formulario manual.`);
-    }
-  }, [mpReady, step, isMpCard, simulatePayments, sending, brickFailed]);
 
   if (!open) return null;
 
@@ -189,16 +100,39 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       });
       const data = await res.json();
       if (data.orderId) {
-        setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
+        setTicket({ orderId: data.orderId, ref: "", clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
       }
       onSuccess();
     } catch {}
     setSending(false); setSent(true);
   };
 
-  // Simulated card payment (dev mode)
+  // Checkout Pro — redirect to MP payment page
+  const handleCheckoutPro = async () => {
+    setSending(true); setError("");
+    const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
+    try {
+      const res = await fetch("/api/mercadopago/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, total, phone: phone.trim(), clientName: name || "Anonimo", notes: notes.trim() }),
+      });
+      const data = await res.json();
+      if (data.success && data.initPoint) {
+        window.location.href = data.initPoint;
+      } else {
+        setError(data.error || "Error al conectar con MercadoPago");
+        setSending(false);
+      }
+    } catch {
+      setError("Error de conexion. Intenta de nuevo.");
+      setSending(false);
+    }
+  };
+
+  // Simulated card payment (dev mode only)
   const handleSimulatedCardPayment = async () => {
-    setSending(true); setError(""); setCardError(false);
+    setSending(true); setError("");
     const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
     try {
       const res = await fetch("/api/mercadopago/process-payment", {
@@ -213,120 +147,15 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       });
       const data = await res.json();
       if (data.success && data.orderId) {
-        setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
+        setTicket({ orderId: data.orderId, ref: "", clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
         onSuccess(); setSent(true);
       } else {
         setError(data.error || "Error al procesar el pago");
-        setCardError(true);
       }
     } catch {
       setError("Error de conexion. Intenta de nuevo.");
-      setCardError(true);
     }
     setSending(false);
-  };
-
-  // Real card payment via Checkout API (MP CardForm brick)
-  const handleCardPayment = async (formData: any): Promise<{ ok: boolean }> => {
-    setSending(true); setError(""); setCardError(false);
-
-    const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
-
-    try {
-      const res = await fetch("/api/mercadopago/process-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentType: "card",
-          token: formData.token,
-          paymentMethodId: formData.payment_method_id,
-          installments: formData.installments || 1,
-          issuerId: formData.issuer_id || undefined,
-          payerEmail: formData.payer?.email || `${name || "cliente"}@cliente.com`,
-          payerFirstName: name || "Cliente",
-          items,
-          total,
-          notes: notes.trim(),
-          phone: phone.trim(),
-          clientName: name || "Anonimo",
-          simulate: false,
-        }),
-      });
-      const data = await res.json();
-
-      if (data.success && data.orderId) {
-        setTicket({ orderId: data.orderId, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: notes.trim(), items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
-        onSuccess(); setSent(true);
-        setSending(false);
-        return { ok: true };
-      } else if (data.success && data.ref) {
-        // Payment pending — stored in pending_orders, webhook will confirm
-        setSent(true);
-        setTicket({ orderId: 0, clientName: name || "Anonimo", clientPhone: phone.trim(), payment, notes: `Pago pendiente | Ref: ${data.ref}`, items: [...cart], total, date: new Date().toLocaleString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) });
-        onSuccess();
-        setSending(false);
-        return { ok: true };
-      } else {
-        setError(data.error || "Pago rechazado. Verifica los datos de tu tarjeta.");
-        setCardError(true);
-        setSending(false);
-        return { ok: false };
-      }
-    } catch {
-      setError("Error de conexion. Intenta de nuevo.");
-      setCardError(true);
-      setSending(false);
-      return { ok: false };
-    }
-  };
-
-  // Submit the CardForm brick programmatically
-  const submitCardForm = () => {
-    if (cardFormRef.current) {
-      cardFormRef.current.submit();
-    }
-  };
-
-  // Manual card payment fallback — tokenize via MP SDK
-  const handleManualCardPayment = async () => {
-    setSending(true); setError(""); setCardError(false);
-
-    try {
-      const [expMonth, expYear] = cardExpiry.split("/").map(s => s.trim());
-      if (!expMonth || !expYear || cardNumber.length < 13 || !cardName.trim() || cardCvv.length < 3) {
-        setError("Completa todos los campos de la tarjeta.");
-        setSending(false);
-        return;
-      }
-
-      const mp = new window.MercadoPago(mpPublicKey);
-      const result = await mp.createCardToken({
-        cardNumber: cardNumber.replace(/\s/g, ""),
-        cardholderName: cardName.trim(),
-        cardExpirationMonth: expMonth,
-        cardExpirationYear: `20${expYear.length === 2 ? expYear : expYear.slice(-2)}`,
-        securityCode: cardCvv,
-        identificationType: "DNI",
-        identificationNumber: "12345678",
-      });
-
-      if (result.token) {
-        await handleCardPayment({
-          token: result.token,
-          payment_method_id: result.payment_method?.id || "visa",
-          installments: 1,
-        });
-      } else {
-        setError(result.message || "Error al validar la tarjeta. Verifica los datos.");
-        setCardError(true);
-        setSending(false);
-      }
-    } catch (e: any) {
-      console.error("[Checkout] Manual token error:", e);
-      setError(e?.message || "Error al procesar la tarjeta. Intenta de nuevo.");
-      setCardError(true);
-      setSending(false);
-    }
   };
 
   const displayMethods = paymentMethods.length > 0 ? paymentMethods : [{ id: 0, name: "Efectivo", enabled: 1, details: [] }];
@@ -343,7 +172,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
         </div>
         <div className="border-t border-dashed border-[var(--brand-border)] pt-3 mb-3">
           <div className="flex justify-between text-[10px] text-[var(--brand-text-muted)] mb-2">
-            <span className="font-mono font-semibold text-[var(--brand-primary)]">{ticket!.orderId ? `#${String(ticket!.orderId).padStart(4, "0")}` : "Pendiente"}</span>
+            <span className="font-mono font-semibold text-[var(--brand-primary)]">{ticket!.orderId ? `#${String(ticket!.orderId).padStart(4, "0")}` : `#${ticket!.ref.slice(-8)}`}</span>
             <span>{ticket!.date}</span>
           </div>
           <p className="text-[12px] font-semibold text-[var(--brand-text)]">{ticket!.clientName}</p>
@@ -446,7 +275,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                     {isMpCard && (
                       <p className="text-[10px] text-[var(--brand-primary)] mt-1.5 flex items-center gap-1">
                         <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                        Pago seguro via Mercado Pago
+                        Seras redirigido a MercadoPago para completar tu pago de forma segura.
                       </p>
                     )}
                   </div>
@@ -473,112 +302,38 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
                           <span className="text-xs font-semibold text-[var(--brand-text)]">Total a pagar</span>
                           <span className="text-lg font-bold text-[var(--brand-primary)]">${total.toFixed(0)}</span>
                         </div>
-                        <p className="text-[10px] text-[var(--brand-text-muted)]">Pago seguro procesado por Mercado Pago</p>
+                        <p className="text-[10px] text-[var(--brand-text-muted)]">Pago seguro procesado por MercadoPago</p>
                       </div>
 
                       {simulatePayments ? (
                         <div className="space-y-4">
                           <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                             <p className="text-xs text-amber-700 font-medium mb-1">Modo simulacion activo</p>
-                            <p className="text-[10px] text-amber-600">Los pagos no se procesan realmente. Desactiva NEXT_PUBLIC_SIMULATE_PAYMENTS para usar Mercado Pago.</p>
+                            <p className="text-[10px] text-amber-600">Desactiva NEXT_PUBLIC_SIMULATE_PAYMENTS para pagos reales con MercadoPago.</p>
                           </div>
                           {error && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
-                          {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Procesando pago simulado...</span></div>)}
-                          {!sending && !error && (
+                          {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Procesando...</span></div>)}
+                          {!sending && (
                             <button onClick={handleSimulatedCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
                               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              Pagar (simulado)
-                            </button>
-                          )}
-                          {cardError && !sending && (
-                            <button onClick={handleSimulatedCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                              Reintentar pago
+                              Pagar ${total.toFixed(0)}
                             </button>
                           )}
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {brickFailed ? (
-                            /* Manual card form fallback */
-                            <div className="space-y-3">
-                              <div>
-                                <label className="text-[10px] font-semibold text-[var(--brand-text-secondary)] uppercase tracking-wider">Numero de tarjeta</label>
-                                <input type="text" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, "").replace(/(\d{4})/g, "$1 ").trim())} maxLength={19} placeholder="1234 5678 9012 3456"
-                                  className="w-full px-4 py-3 rounded-xl border border-[var(--brand-border)] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-all" />
-                              </div>
-                              <div>
-                                <label className="text-[10px] font-semibold text-[var(--brand-text-secondary)] uppercase tracking-wider">Titular de la tarjeta</label>
-                                <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value.toUpperCase())} placeholder="NOMBRE COMO APARECE EN LA TARJETA"
-                                  className="w-full px-4 py-3 rounded-xl border border-[var(--brand-border)] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-all" />
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="text-[10px] font-semibold text-[var(--brand-text-secondary)] uppercase tracking-wider">Vencimiento</label>
-                                  <input type="text" value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value.replace(/\D/g, "").replace(/^(\d{2})/, "$1/").slice(0, 5))} maxLength={5} placeholder="MM/AA"
-                                    className="w-full px-4 py-3 rounded-xl border border-[var(--brand-border)] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-all" />
-                                </div>
-                                <div>
-                                  <label className="text-[10px] font-semibold text-[var(--brand-text-secondary)] uppercase tracking-wider">CVV</label>
-                                  <input type="text" value={cardCvv} onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))} maxLength={4} placeholder="123"
-                                    className="w-full px-4 py-3 rounded-xl border border-[var(--brand-border)] text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/20 focus:border-[var(--brand-primary)] transition-all" />
-                                </div>
-                              </div>
-                              <p className="text-[9px] text-[var(--brand-text-muted)] text-center">
-                                <svg className="w-3 h-3 inline mr-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                Tus datos de tarjeta se tokenizan directamente con MercadoPago. No almacenamos esta informacion.
-                              </p>
-                            </div>
-                          ) : (
-                            /* MP CardPayment Brick container */
-                            <>
-                              <div ref={cardFormContainerRef} className="min-h-[200px]" />
-                              {!mpReady && (
-                                <div className="flex items-center justify-center gap-2 py-4">
-                                  <div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
-                                  <span className="text-xs text-[var(--brand-text-muted)]">Cargando formulario de pago...</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-
+                          <div className="p-4 bg-sky-50 border border-sky-200 rounded-xl">
+                            <p className="text-xs text-sky-700 font-medium mb-1">Seras redirigido a MercadoPago</p>
+                            <p className="text-[10px] text-sky-600">Completa tu pago en la pagina segura de MercadoPago. No almacenamos los datos de tu tarjeta.</p>
+                          </div>
                           {error && (<div className="p-3 bg-red-50 border border-red-200 rounded-xl"><p className="text-red-600 text-xs">{error}</p></div>)}
-
-                          {sending && (
-                            <div className="flex items-center justify-center gap-2 py-2">
-                              <div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" />
-                              <span className="text-xs text-[var(--brand-text-muted)]">Procesando pago...</span>
-                            </div>
+                          {sending && (<div className="flex items-center justify-center gap-2 py-2"><div className="animate-spin w-4 h-4 border-2 border-[var(--brand-primary)] border-t-transparent rounded-full" /><span className="text-xs text-[var(--brand-text-muted)]">Conectando con MercadoPago...</span></div>)}
+                          {!sending && (
+                            <button onClick={handleCheckoutPro} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
+                              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                              Ir a pagar con MercadoPago
+                            </button>
                           )}
-
-                          {mpReady && !sending && (
-                            brickFailed ? (
-                              <button onClick={handleManualCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                Pagar ${total.toFixed(0)}
-                              </button>
-                            ) : (
-                              <button onClick={submitCardForm} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                Pagar ${total.toFixed(0)}
-                              </button>
-                            )
-                          )}
-
-                          {cardError && mpReady && !sending && (
-                            brickFailed ? (
-                              <button onClick={handleManualCardPayment} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                Reintentar pago
-                              </button>
-                            ) : (
-                              <button onClick={submitCardForm} className="btn-primary w-full py-3 text-sm font-semibold flex items-center justify-center gap-2">
-                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                Reintentar pago
-                              </button>
-                            )
-                          )}
-
                           <button onClick={() => { setStep(2); setError(""); }} className="btn-outline w-full py-3 text-sm font-medium">← Cambiar metodo de pago</button>
                         </div>
                       )}
@@ -643,20 +398,3 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     </>
   );
 }
-
-/*
- * ── LEGACY: Checkout Pro (redirect to MP) ──
- * Kept as reference if we ever need to switch back.
- *
- * const handleCheckoutPro = async () => {
- *   setSending(true); setError("");
- *   const items = cart.map((i) => ({ name: i.product.name, quantity: i.quantity, price: i.product.price }));
- *   const res = await fetch("/api/mercadopago/create-preference", {
- *     method: "POST", headers: { "Content-Type": "application/json" },
- *     body: JSON.stringify({ items, total, phone: phone.trim(), clientName: name || "Anonimo", notes: notes.trim() }),
- *   });
- *   const data = await res.json();
- *   if (data.success && data.initPoint) window.location.href = data.initPoint;
- *   else { setError(data.error || "Error al conectar con MercadoPago"); setSending(false); }
- * };
- */
