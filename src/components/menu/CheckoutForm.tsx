@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { loadMercadoPago } from "@mercadopago/sdk-js";
 import { CartItem } from "@/app/menu/page";
 
 interface Props {
@@ -64,22 +65,14 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
     [paymentMethods, payment]
   );
 
-  // Load MercadoPago SDK
+  // Load MercadoPago SDK via npm package
   useEffect(() => {
     if (!isMpCard || simulatePayments) return;
     if (window.MercadoPago) { setMpReady(true); return; }
 
-    const script = document.createElement("script");
-    script.src = "https://sdk.mercadopago.com/js/v2";
-    script.async = true;
-    script.onload = () => setMpReady(true);
-    script.onerror = () => console.warn("[Checkout] MP SDK failed to load");
-    document.body.appendChild(script);
-
-    return () => {
-      const el = document.querySelector('script[src="https://sdk.mercadopago.com/js/v2"]');
-      if (el) el.remove();
-    };
+    loadMercadoPago()
+      .then(() => setMpReady(true))
+      .catch(() => console.warn("[Checkout] MP SDK failed to load"));
   }, [isMpCard, simulatePayments]);
 
   // Load payment methods

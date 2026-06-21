@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mercadopago/sdk-js": "^0.0.3",
     "@whiskeysockets/baileys": "^6.7.21",
     "better-sqlite3": "^11.7.0",
     "concurrently": "^9.1.0",
