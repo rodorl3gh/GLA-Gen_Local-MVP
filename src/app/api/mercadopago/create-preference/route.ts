@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createPreference } from "@/lib/mercadopago";
-import { createOrder } from "@/lib/db";
+import { insertPendingOrder, cleanExpiredPendingOrders } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
@@ -12,18 +12,23 @@ export async function POST(req: Request) {
     }
 
     const orderPhone = `${clientName || "Cliente"} - ${(phone || "").trim()}`;
-    const externalRef = `ORDER-${Date.now()}`;
 
-    // Create the order first with pending status
-    const orderId = createOrder(
-      orderPhone.trim(),
+    // Clean expired pending orders
+    try { cleanExpiredPendingOrders(); } catch {}
+
+    // Generate unique reference — will be used as MP external_reference
+    const externalRef = `PREF-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    // Store order data in pending_orders — NOT in orders yet
+    // The order will only be created when the webhook confirms payment
+    insertPendingOrder(
+      externalRef,
+      orderPhone,
       items,
       Number(total),
       "Tarjeta",
       notes || "",
-      "",
-      "pending",
-      {}
+      "preference"
     );
 
     const prefItems = items.map((i: any, idx: number) => ({
@@ -38,11 +43,11 @@ export async function POST(req: Request) {
     const result = await createPreference({
       items: prefItems,
       payer: clientName ? { name: clientName, email: `${clientName.toLowerCase().replace(/\s/g, "")}@cliente.com` } : undefined,
-      externalReference: String(orderId),
+      externalReference: externalRef,
       backUrls: {
-        success: `${baseUrl}/menu/resultado?orderId=${orderId}&status=success`,
-        failure: `${baseUrl}/menu/resultado?orderId=${orderId}&status=failure`,
-        pending: `${baseUrl}/menu/resultado?orderId=${orderId}&status=pending`,
+        success: `${baseUrl}/menu/resultado?ref=${externalRef}&result=success`,
+        failure: `${baseUrl}/menu/resultado?ref=${externalRef}&result=failure`,
+        pending: `${baseUrl}/menu/resultado?ref=${externalRef}&result=pending`,
       },
       autoReturn: "approved",
     });
@@ -53,7 +58,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      orderId,
+      ref: externalRef,
       preferenceId: result.preferenceId,
       initPoint: result.initPoint,
     });

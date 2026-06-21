@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, cleanExpiredPendingOrders } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -12,6 +12,9 @@ export async function GET(req: NextRequest) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayStartTs = Math.floor(todayStart.getTime() / 1000);
+
+  // Clean expired pending orders (older than 1h)
+  try { cleanExpiredPendingOrders(); } catch {}
 
   // Auto-expire orders older than 24h that are still pending/preparing
   // Try-catch: deployed DBs may lack 'expirado' in CHECK constraint

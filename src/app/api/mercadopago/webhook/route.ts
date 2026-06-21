@@ -1,12 +1,101 @@
 import { NextResponse, NextRequest } from "next/server";
 import { MercadoPagoConfig, Payment } from "mercadopago";
-import { updateOrderPayment, getOrderByMpPaymentId } from "@/lib/db";
+import { updateOrderPayment, getOrderByMpPaymentId, getOrderById, createOrder, getPendingOrderByRef, deletePendingOrder } from "@/lib/db";
 import { notifyOwnerNewOrder } from "@/lib/notify-owner";
 
 const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
 
 const mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
 const paymentApi = new Payment(mpClient);
+
+async function handlePaymentConfirmation(paymentId: string) {
+  const payment = await paymentApi.get({ id: paymentId }).catch(() => null);
+  if (!payment) {
+    console.log("[Webhook] Payment not found in MP:", paymentId);
+    return { ok: true, message: "Payment not found (test or invalid)" };
+  }
+
+  const mpStatus = payment.status === "approved" ? "approved"
+    : payment.status === "rejected" ? "rejected"
+    : payment.status === "cancelled" ? "rejected"
+    : payment.status === "refunded" ? "refunded"
+    : "pending";
+
+  const extRef = (payment as any).external_reference;
+
+  console.log("[Webhook] paymentId:", paymentId, "| status:", payment.status, "| extRef:", extRef);
+
+  // 1. Check if there's a pending_order waiting for this payment
+  if (extRef) {
+    const pending = getPendingOrderByRef(extRef);
+    if (pending) {
+      console.log("[Webhook] Found pending_order #", pending.id, "| ref:", extRef);
+
+      if (mpStatus === "approved") {
+        // Payment confirmed — CREATE THE ORDER NOW
+        const orderId = createOrder(
+          pending.phone,
+          pending.items,
+          pending.total,
+          pending.payment_method,
+          pending.notes || "",
+          paymentId,
+          "approved",
+          payment
+        );
+
+        // Delete the pending record
+        deletePendingOrder(extRef);
+
+        // Notify owner
+        try { await notifyOwnerNewOrder(orderId, "Cafeteria Luna Test"); } catch {}
+
+        console.log("[Webhook] Order created from pending:", orderId);
+        return { ok: true, orderId, paymentStatus: "approved", source: "pending_orders" };
+      }
+
+      if (mpStatus === "rejected" || mpStatus === "refunded") {
+        // Payment failed — clean up the pending record
+        deletePendingOrder(extRef);
+        console.log("[Webhook] Pending order deleted due to rejection:", extRef);
+        return { ok: true, message: "Pending order removed", paymentStatus: mpStatus };
+      }
+
+      // Still pending — do nothing, wait for next webhook
+      return { ok: true, message: "Awaiting payment confirmation", paymentStatus: mpStatus };
+    }
+  }
+
+  // 2. Fallback: try to find an existing order by mp_payment_id (simulated or pre-existing)
+  const order = getOrderByMpPaymentId(paymentId);
+  if (order) {
+    updateOrderPayment(order.id, paymentId, mpStatus, payment);
+
+    if (mpStatus === "approved" && order.payment_status !== "approved") {
+      try { await notifyOwnerNewOrder(order.id, "Cafeteria Luna Test"); } catch {}
+    }
+
+    return { ok: true, orderId: order.id, paymentStatus: mpStatus, source: "orders" };
+  }
+
+  // 3. Try fallback: extRef matching an existing order ID (for preference flow with old-style orders)
+  if (extRef) {
+    const orderId = Number(extRef);
+    if (!isNaN(orderId)) {
+      const fallbackOrder = getOrderById(orderId);
+      if (fallbackOrder) {
+        updateOrderPayment(fallbackOrder.id, paymentId, mpStatus, payment);
+        if (mpStatus === "approved" && fallbackOrder.payment_status !== "approved") {
+          try { await notifyOwnerNewOrder(fallbackOrder.id, "Cafeteria Luna Test"); } catch {}
+        }
+        return { ok: true, orderId: fallbackOrder.id, paymentStatus: mpStatus, source: "orders_by_extref" };
+      }
+    }
+  }
+
+  console.log("[Webhook] No pending_order or order found for payment:", paymentId);
+  return { ok: true, message: "No matching order found" };
+}
 
 export async function POST(req: Request) {
   try {
@@ -33,29 +122,8 @@ export async function POST(req: Request) {
           return NextResponse.json({ ok: false, error: "No payment ID" }, { status: 400 });
         }
 
-        const payment = await paymentApi.get({ id: String(paymentId) }).catch(() => null);
-        if (!payment) {
-          return NextResponse.json({ ok: true, message: "Payment not found (test or invalid)" });
-        }
-
-        const order = getOrderByMpPaymentId(String(paymentId));
-        if (!order) {
-          return NextResponse.json({ ok: true, message: "Order not found for this payment" });
-        }
-
-        const mpStatus = payment.status === "approved" ? "approved"
-          : payment.status === "rejected" ? "rejected"
-          : payment.status === "cancelled" ? "rejected"
-          : payment.status === "refunded" ? "refunded"
-          : "pending";
-
-        updateOrderPayment(order.id, String(paymentId), mpStatus, payment);
-
-        if (mpStatus === "approved" && order.payment_status !== "approved") {
-          try { await notifyOwnerNewOrder(order.id, "Cafeteria Luna Test"); } catch {}
-        }
-
-        return NextResponse.json({ ok: true, orderId: order.id, paymentStatus: mpStatus });
+        const result = await handlePaymentConfirmation(String(paymentId));
+        return NextResponse.json(result);
       }
 
       case "subscription.updated":
@@ -89,27 +157,8 @@ export async function GET(req: NextRequest) {
 
   if (topic === "payment" && paymentId) {
     try {
-      const payment = await paymentApi.get({ id: paymentId }).catch(() => null);
-      if (payment) {
-        const order = getOrderByMpPaymentId(paymentId);
-        if (order) {
-          const mpStatus = payment.status === "approved" ? "approved"
-            : payment.status === "rejected" ? "rejected"
-            : payment.status === "cancelled" ? "rejected"
-            : payment.status === "refunded" ? "refunded"
-            : "pending";
-
-          updateOrderPayment(order.id, paymentId, mpStatus, payment);
-
-          if (mpStatus === "approved" && order.payment_status !== "approved") {
-            try { await notifyOwnerNewOrder(order.id, "Cafeteria Luna Test"); } catch {}
-          }
-
-          return NextResponse.json({ ok: true, orderId: order.id, paymentStatus: mpStatus });
-        }
-      }
-      // Always return 200, even if order not found (MP test notification)
-      return NextResponse.json({ ok: true });
+      const result = await handlePaymentConfirmation(paymentId);
+      return NextResponse.json(result);
     } catch {
       return NextResponse.json({ ok: true });
     }

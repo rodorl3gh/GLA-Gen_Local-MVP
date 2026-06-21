@@ -134,6 +134,18 @@ function runMigrations(db: Database.Database) {
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     );
+
+    CREATE TABLE IF NOT EXISTS pending_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_ref TEXT NOT NULL UNIQUE,
+      phone TEXT NOT NULL,
+      items TEXT NOT NULL DEFAULT '[]',
+      total REAL NOT NULL DEFAULT 0,
+      payment_method TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      payment_type TEXT DEFAULT 'card',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
   `);
 
   // Ensure UNIQUE index on payment_methods.name (for existing DBs created before UNIQUE was added)
@@ -672,4 +684,28 @@ export function createPaymentMethod(name: string, enabled: number, details: stri
     .prepare("INSERT INTO payment_methods (name, enabled, details) VALUES (?, ?, ?)")
     .run(name, enabled, JSON.stringify(details));
   return Number(result.lastInsertRowid);
+}
+
+// ── Pending Orders (pre-payment storage)
+
+export function insertPendingOrder(ref: string, phone: string, items: any[], total: number, paymentMethod: string, notes?: string, paymentType?: string): number {
+  const result = getDb()
+    .prepare("INSERT INTO pending_orders (external_ref, phone, items, total, payment_method, notes, payment_type) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(ref, phone, JSON.stringify(items), total, paymentMethod, notes || "", paymentType || "card");
+  return Number(result.lastInsertRowid);
+}
+
+export function getPendingOrderByRef(externalRef: string): any {
+  const row = getDb().prepare("SELECT * FROM pending_orders WHERE external_ref = ?").get(externalRef) as any;
+  if (!row) return null;
+  return { ...row, items: JSON.parse(row.items || "[]") };
+}
+
+export function deletePendingOrder(externalRef: string) {
+  getDb().prepare("DELETE FROM pending_orders WHERE external_ref = ?").run(externalRef);
+}
+
+export function cleanExpiredPendingOrders() {
+  const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
+  getDb().prepare("DELETE FROM pending_orders WHERE created_at < ?").run(oneHourAgo);
 }

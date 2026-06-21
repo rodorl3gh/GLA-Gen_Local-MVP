@@ -6,16 +6,15 @@ import Link from "next/link";
 
 function ResultadoContent() {
   const searchParams = useSearchParams();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [resultStatus, setResultStatus] = useState<"approved" | "pending" | "rejected" | "error">("pending");
-  const [orderId, setOrderId] = useState<string>("");
+  const [refCode, setRefCode] = useState<string>("");
 
   useEffect(() => {
-    const status = searchParams.get("status") || searchParams.get("collection_status");
-    const paymentId = searchParams.get("payment_id");
-    const oid = searchParams.get("orderId");
+    const status = searchParams.get("collection_status") || searchParams.get("status") || "";
+    const ref = searchParams.get("ref") || searchParams.get("orderId") || "";
 
-    if (oid) setOrderId(oid);
+    if (ref) setRefCode(ref);
 
     if (status === "approved") {
       setResultStatus("approved");
@@ -25,24 +24,14 @@ function ResultadoContent() {
       setResultStatus("pending");
     }
 
-    if (paymentId && oid) {
-      fetch(`/api/orders/${oid}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payment_status: status === "approved" ? "approved" : status === "rejected" ? "rejected" : "pending",
-        }),
-      }).finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    setLoading(false);
   }, [searchParams]);
 
   const config = {
     approved: {
       title: "Pago Aprobado",
       desc: "Tu pago fue procesado con exito.",
-      detal: "En breve recibiras la confirmacion de tu pedido.",
+      detal: "Tu pedido se esta generando. En breve recibiras la confirmacion.",
       color: "text-emerald-600",
       bg: "bg-emerald-50 border-emerald-200",
       icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
@@ -92,9 +81,9 @@ function ResultadoContent() {
             <h2 className={`text-lg font-bold ${c.color} mb-2`}>{c.title}</h2>
             <p className="text-sm text-[var(--brand-text-secondary)] mb-1">{c.desc}</p>
             <p className="text-xs text-[var(--brand-text-muted)] mb-6">{c.detal}</p>
-            {orderId && (
+            {refCode && (
               <p className="text-xs text-[var(--brand-text-muted)] mb-4">
-                Pedido <span className="font-mono font-semibold text-[var(--brand-primary)]">#{orderId}</span>
+                Referencia <span className="font-mono font-semibold text-[var(--brand-primary)]">#{refCode}</span>
               </p>
             )}
             {resultStatus === "rejected" && (
