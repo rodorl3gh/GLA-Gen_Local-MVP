@@ -3,13 +3,13 @@ import { MercadoPagoConfig, Payment } from "mercadopago";
 import { updateOrderPayment, getOrderByMpPaymentId, getOrderById, createOrder, getPendingOrderByRef, deletePendingOrder } from "@/lib/db";
 import { notifyOwnerNewOrder } from "@/lib/notify-owner";
 
-const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
-
-const mpClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
-const paymentApi = new Payment(mpClient);
+function getPaymentApi(): Payment {
+  const token = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
+  return new Payment(new MercadoPagoConfig({ accessToken: token }));
+}
 
 async function handlePaymentConfirmation(paymentId: string) {
-  const payment = await paymentApi.get({ id: paymentId }).catch(() => null);
+  const payment = await getPaymentApi().get({ id: paymentId }).catch(() => null);
   if (!payment) {
     console.log("[Webhook] Payment not found in MP:", paymentId);
     return { ok: true, message: "Payment not found (test or invalid)" };

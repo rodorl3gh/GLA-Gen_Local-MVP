@@ -1,13 +1,16 @@
 import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 
-const MP_MODE = process.env.MP_MODE || "production";
-const MP_ACCESS_TOKEN = process.env.MERCADOPAGO_ACCESS_TOKEN || "";
+function getAccessToken(): string {
+  return process.env.MERCADOPAGO_ACCESS_TOKEN || "";
+}
 
-const mpClient = new MercadoPagoConfig({
-  accessToken: MP_ACCESS_TOKEN,
-});
+function getMpClient(): MercadoPagoConfig {
+  return new MercadoPagoConfig({ accessToken: getAccessToken() });
+}
 
-const paymentApi = new Payment(mpClient);
+function getPaymentApi(): Payment {
+  return new Payment(getMpClient());
+}
 
 interface MpPaymentResult {
   success: boolean;
@@ -52,10 +55,10 @@ export async function createCardPayment(params: {
     if (params.issuerId) body.issuer_id = params.issuerId;
     if (params.externalReference) body.external_reference = params.externalReference;
 
-    console.log("[MP SDK] Modo:", MP_MODE, "| Token ends:", "..." + MP_ACCESS_TOKEN.slice(-15));
+    console.log("[MP SDK] Token ends:", "..." + getAccessToken().slice(-15));
     console.log("[MP SDK] Creando pago — method:", params.paymentMethodId, "| amount:", params.amount, "| installments:", params.installments, "| token:", params.token.slice(0, 12) + "...");
 
-    const result = await paymentApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
+    const result = await getPaymentApi().create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
 
     console.log("[MP SDK] Respuesta — id:", result.id, "| status:", result.status, "| detail:", result.status_detail);
 
@@ -111,7 +114,7 @@ export async function createBankTransferPayment(params: {
 
     if (params.externalReference) body.external_reference = params.externalReference;
 
-    const result = await paymentApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
+    const result = await getPaymentApi().create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
 
     if (result.id) {
       return {
@@ -139,7 +142,7 @@ export async function createBankTransferPayment(params: {
 
 export async function getPayment(paymentId: string): Promise<any> {
   try {
-    const result = await paymentApi.get({ id: paymentId });
+    const result = await getPaymentApi().get({ id: paymentId });
     return result;
   } catch {
     return null;
@@ -149,7 +152,7 @@ export async function getPayment(paymentId: string): Promise<any> {
 export async function getPaymentMethods(): Promise<any[]> {
   try {
     const { MercadoPagoConfig, PaymentMethod } = await import("mercadopago");
-    const pmClient = new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN });
+    const pmClient = new MercadoPagoConfig({ accessToken: getAccessToken() });
     const pmApi = new PaymentMethod(pmClient);
     const result = await pmApi.get();
     return Array.isArray(result) ? result : [];
@@ -166,7 +169,7 @@ export async function createPreference(params: {
   autoReturn?: string;
 }): Promise<{ success: boolean; preferenceId?: string; initPoint?: string; error?: string }> {
   try {
-    const preferenceApi = new Preference(mpClient);
+    const preferenceApi = new Preference(getMpClient());
     const body: any = {
       items: params.items.map(i => ({
         id: i.id,
