@@ -2,6 +2,7 @@ providers = ["node"]
 
 [variables]
 NIXPACKS_NODE_VERSION = "22"
+NEXT_PUBLIC_MP_MODE = "production"
 NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY = "APP_USR-df633991-5afe-42f5-b476-f9c90a1240a0"
 
 [phases.setup]

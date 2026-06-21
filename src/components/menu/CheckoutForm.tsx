@@ -54,10 +54,7 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   const cardFormContainerRef = useRef<HTMLDivElement>(null);
 
   const simulatePayments = (process.env.NEXT_PUBLIC_SIMULATE_PAYMENTS || "").trim() === "true";
-  const mpMode = (process.env.NEXT_PUBLIC_MP_MODE || "sandbox").trim();
-  const mpPublicKey = mpMode === "production"
-    ? (process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "").trim()
-    : (process.env.NEXT_PUBLIC_MERCADOPAGO_SANDBOX_PUBLIC_KEY || "").trim();
+  const mpPublicKey = (process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY || "").trim();
 
   const isMpCard = payment === "Tarjeta";
   const selectedMethod = useMemo(() =>
@@ -68,11 +65,12 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
   // Load MercadoPago SDK via npm package
   useEffect(() => {
     if (!isMpCard || simulatePayments) return;
-    if (window.MercadoPago) { setMpReady(true); return; }
+    if (window.MercadoPago) { console.log("[Checkout] MP SDK already loaded"); setMpReady(true); return; }
 
+    console.log("[Checkout] Loading MP SDK...");
     loadMercadoPago()
-      .then(() => setMpReady(true))
-      .catch(() => console.warn("[Checkout] MP SDK failed to load"));
+      .then(() => { console.log("[Checkout] MP SDK loaded successfully"); setMpReady(true); })
+      .catch((e) => console.warn("[Checkout] MP SDK failed to load:", e));
   }, [isMpCard, simulatePayments]);
 
   // Load payment methods
@@ -103,8 +101,19 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
   // Render MP CardForm brick when ready and on step 3
   useEffect(() => {
-    if (!mpReady || !cardFormContainerRef.current || step !== 3 || !isMpCard || simulatePayments || sending) return;
-    if (cardFormRef.current) return; // already rendered
+    if (!mpReady) return;
+    if (!isMpCard || simulatePayments) return;
+    if (step !== 3) return;
+    if (sending) return;
+    if (!cardFormContainerRef.current) return;
+    if (cardFormRef.current) return;
+
+    console.log("[Checkout] Creating CardForm brick | publicKey:", mpPublicKey ? `${mpPublicKey.slice(0, 12)}...` : "EMPTY", "| amount:", total);
+
+    if (!mpPublicKey) {
+      setError("Error: clave publica de MercadoPago no configurada.");
+      return;
+    }
 
     const mp = new window.MercadoPago(mpPublicKey, { locale: "es-MX" });
 
@@ -121,17 +130,28 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
       },
       callbacks: {
         onFormMounted: (error: any) => {
-          if (error) { console.error("[Checkout] CardForm mount error:", error); setError("Error al cargar el formulario de tarjeta."); }
+          if (error) {
+            console.error("[Checkout] CardForm mount error:", error);
+            setError("Error al cargar el formulario de tarjeta. Verifica tu conexion.");
+          } else {
+            console.log("[Checkout] CardForm mounted successfully");
+          }
         },
         onSubmit: async (formData: any) => {
           return await handleCardPayment(formData);
         },
-        onValidityChange: () => {},
-        onError: () => {},
+        onValidityChange: (error: any) => {
+          // Called when form validity changes
+        },
+        onError: (error: any) => {
+          console.error("[Checkout] CardForm error:", error);
+        },
       },
     }).then((brick: any) => {
+      console.log("[Checkout] CardForm brick created");
       cardFormRef.current = brick;
-    }).catch(() => {
+    }).catch((e: any) => {
+      console.error("[Checkout] CardForm brick creation failed:", e);
       setError("Error al cargar el formulario de pago. Intenta de nuevo.");
     });
   }, [mpReady, step, isMpCard, simulatePayments, sending]);
