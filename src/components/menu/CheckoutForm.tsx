@@ -126,20 +126,15 @@ export default function CheckoutForm({ open, onClose, cart, total, tableNumber, 
 
     try {
       const mp = new window.MercadoPago(mpPublicKey, { locale: "es-MX" });
+      const safeAmount = Number(total) || 1;
 
       mp.bricks().create("cardPayment", cardFormContainerRef.current, {
         initialization: {
-          amount: total,
-          payer: {
-            email: "cliente@correo.com",
-          },
+          amount: safeAmount,
+          payer: { email: "cliente@correo.com" },
         },
         customization: {
-          visual: {
-            style: { default: { boxShadow: "none" } },
-            hideFormTitle: true,
-            hidePaymentButton: true,
-          },
+          visual: { hidePaymentButton: true },
         },
         callbacks: {
           onReady: () => {
