@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, cleanExpiredPendingOrders } from "@/lib/db";
+import { getMexicoTodayStartTs } from "@/lib/mexico-timezone";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -9,9 +10,7 @@ export async function GET(req: NextRequest) {
 
   const now = Math.floor(Date.now() / 1000);
   const twentyFourHoursAgo = now - 86400;
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartTs = Math.floor(todayStart.getTime() / 1000);
+  const todayStartTs = getMexicoTodayStartTs();
 
   // Clean expired pending orders (older than 1h)
   try { cleanExpiredPendingOrders(); } catch {}

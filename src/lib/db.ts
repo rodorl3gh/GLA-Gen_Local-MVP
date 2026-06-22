@@ -558,9 +558,15 @@ export function getOrderByMpPaymentId(mpPaymentId: string): any {
 export function getOrdersStats(): any {
   const db = getDb();
   const total = (db.prepare("SELECT COUNT(*) as c FROM orders").get() as any).c;
-  const hoy = (db.prepare("SELECT COUNT(*) as c FROM orders WHERE date(created_at, 'unixepoch') = date('now')").get() as any).c;
+  // Use Mexico timezone (UTC-6) for "today" calculation
+  const todayDate = new Date(Date.now() - 6 * 3600000).toISOString().split("T")[0];
+  const hoy = (db.prepare(
+    "SELECT COUNT(*) as c FROM orders WHERE date(created_at, 'unixepoch', '-6 hours') = ?"
+  ).get(todayDate) as any).c;
   const pendientes = (db.prepare("SELECT COUNT(*) as c FROM orders WHERE status = 'pending'").get() as any).c;
-  const ingresosHoy = (db.prepare("SELECT COALESCE(SUM(total),0) as t FROM orders WHERE status != 'cancelled' AND date(created_at, 'unixepoch') = date('now')").get() as any).t;
+  const ingresosHoy = (db.prepare(
+    "SELECT COALESCE(SUM(total),0) as t FROM orders WHERE status != 'cancelled' AND date(created_at, 'unixepoch', '-6 hours') = ?"
+  ).get(todayDate) as any).t;
   return { total, hoy, pendientes, ingresos_hoy: ingresosHoy };
 }
 
