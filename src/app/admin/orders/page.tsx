@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AdminSidebar from "@/components/admin/Sidebar";
+import { getLocalDateString } from "@/lib/date-helper";
 
 type ViewMode = "list" | "kanban";
 
@@ -42,7 +43,7 @@ function formatDate(isoString: string): string {
 }
 
 function toLocalDate(isoString: string): string {
-  try { return new Date(isoString).toISOString().split("T")[0]; } catch { return ""; }
+  try { return getLocalDateString(new Date(isoString)); } catch { return ""; }
 }
 
 export default function AdminOrders() {
@@ -54,14 +55,15 @@ export default function AdminOrders() {
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
   const [draggedOrderId, setDraggedOrderId] = useState<number | null>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
 
   // Report modal state
   const [showReport, setShowReport] = useState(false);
-  const oneMonthAgo = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-  const [reportFrom, setReportFrom] = useState(oneMonthAgo);
+  const oneMonthAgo = new Date(Date.now() - 30 * 86400000);
+  const oneMonthAgoStr = getLocalDateString(oneMonthAgo);
+  const [reportFrom, setReportFrom] = useState(oneMonthAgoStr);
   const [reportTo, setReportTo] = useState(today);
   const [reportFilters, setReportFilters] = useState({
     total: true,

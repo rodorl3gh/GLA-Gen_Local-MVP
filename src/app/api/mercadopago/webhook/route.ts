@@ -55,14 +55,39 @@ async function handlePaymentConfirmation(paymentId: string) {
       }
 
       if (mpStatus === "rejected" || mpStatus === "refunded") {
-        // Payment failed — clean up the pending record
-        deletePendingOrder(extRef);
-        console.log("[Webhook] Pending order deleted due to rejection:", extRef);
-        return { ok: true, message: "Pending order removed", paymentStatus: mpStatus };
+        // Payment failed — keep the pending record so retries with same preference work
+        console.log("[Webhook] Payment rejected, keeping pending_order for retry:", extRef);
+        return { ok: true, message: "Payment rejected, pending order kept", paymentStatus: mpStatus };
       }
 
       // Still pending — do nothing, wait for next webhook
       return { ok: true, message: "Awaiting payment confirmation", paymentStatus: mpStatus };
+    }
+
+    // pending_order NOT found but payment is approved — create order from payment data
+    if (mpStatus === "approved") {
+      const payerName = (payment as any).payer?.first_name || "";
+      const payerEmail = (payment as any).payer?.email || "";
+      const description = (payment as any).description || "Pedido desde MercadoPago";
+      const amount = (payment as any).transaction_amount || 0;
+      const items = [{ name: description.slice(0, 100), quantity: 1, price: amount }];
+      const phone = `${payerName} (${payerEmail})`.trim() || "Cliente MP";
+
+      const orderId = createOrder(
+        phone,
+        items,
+        amount,
+        "Tarjeta",
+        `Ref: ${extRef}`,
+        paymentId,
+        "approved",
+        payment
+      );
+
+      try { await notifyOwnerNewOrder(orderId, "Cafeteria Luna Test"); } catch {}
+
+      console.log("[Webhook] Order created from payment data (fallback):", orderId);
+      return { ok: true, orderId, paymentStatus: "approved", source: "payment_fallback" };
     }
   }
 

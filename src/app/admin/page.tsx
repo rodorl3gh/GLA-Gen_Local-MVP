@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import AdminSidebar from "@/components/admin/Sidebar";
+import { getLocalDateString } from "@/lib/date-helper";
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({ total: 0, hoy: 0, pendientes: 0, ingresos_hoy: 0 });
@@ -9,7 +10,7 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
 
