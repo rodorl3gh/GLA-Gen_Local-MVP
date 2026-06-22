@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     const prefItems = items.map((i: any, idx: number) => ({
       id: String(idx + 1),
       title: i.name.slice(0, 50),
+      description: i.name.slice(0, 120),
       quantity: i.quantity || 1,
       unit_price: Number(i.price || 0),
     }));
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
       items: prefItems,
       payer: clientName ? { name: clientName, email: `${clientName.toLowerCase().replace(/\s/g, "")}@cliente.com` } : undefined,
       externalReference: externalRef,
+      statementDescriptor: "CAFETERIALUNATEST",
       backUrls: {
         success: `${baseUrl}/menu/resultado?ref=${externalRef}&result=success`,
         failure: `${baseUrl}/menu/resultado?ref=${externalRef}&result=failure`,

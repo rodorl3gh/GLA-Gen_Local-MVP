@@ -162,11 +162,12 @@ export async function getPaymentMethods(): Promise<any[]> {
 }
 
 export async function createPreference(params: {
-  items: Array<{ id: string; title: string; quantity: number; unit_price: number }>;
+  items: Array<{ id: string; title: string; description?: string; quantity: number; unit_price: number }>;
   payer?: { name?: string; email?: string; phone?: { area_code: string; number: string } };
   externalReference?: string;
   backUrls?: { success?: string; failure?: string; pending?: string };
   autoReturn?: string;
+  statementDescriptor?: string;
 }): Promise<{ success: boolean; preferenceId?: string; initPoint?: string; error?: string }> {
   try {
     const preferenceApi = new Preference(getMpClient());
@@ -174,6 +175,7 @@ export async function createPreference(params: {
       items: params.items.map(i => ({
         id: i.id,
         title: i.title,
+        description: i.description || i.title,
         quantity: i.quantity,
         unit_price: i.unit_price,
         currency_id: "MXN",
@@ -187,6 +189,7 @@ export async function createPreference(params: {
     };
     if (params.payer) body.payer = params.payer;
     if (params.externalReference) body.external_reference = params.externalReference;
+    if (params.statementDescriptor) body.statement_descriptor = params.statementDescriptor;
 
     const result = await preferenceApi.create({ body, requestOptions: { idempotencyKey: crypto.randomUUID() } });
 
