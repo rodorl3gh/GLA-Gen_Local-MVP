@@ -242,56 +242,109 @@ export default function AdminOrders() {
     { label: "Ingresos Hoy", value: `$${(stats.ingresos_hoy || 0).toFixed(0)}`, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-100 dark:bg-sky-500/[0.06]", border: "border-sky-300 dark:border-sky-500/20" },
   ];
 
+  const rowSelected = (o: any) => selected?.id === o.id;
+  const rowBaseClasses = (o: any) => `rounded-2xl border transition-all duration-200 cursor-pointer p-3 md:p-4 ${
+    rowSelected(o)
+      ? "border-[var(--admin-accent)]/50 bg-[var(--admin-accent)]/5"
+      : "border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] hover:border-[var(--admin-accent)]/30 hover:bg-[var(--admin-bg-hover)]"
+  }`;
+
   const renderListRow = (o: any) => {
     const s = STATUS[o.status] || STATUS.pending;
     const ps = PAYMENT_STATUS[o.payment_status] || null;
     const isCard = o.payment_method === "Tarjeta";
+    const itemsText = o.items?.map((i: any) => `${i.name} x${i.quantity}`).join(", ");
     return (
-      <div key={o.id} onClick={() => setSelected(o)}
-        className={`flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200 cursor-pointer ${
-          selected?.id === o.id
-            ? "border-[var(--admin-accent)]/50 bg-[var(--admin-accent)]/5"
-            : "border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] hover:border-[var(--admin-accent)]/30 hover:bg-[var(--admin-bg-hover)]"
-        }`}>
-        <span className="text-sm font-mono text-[var(--admin-text)] font-medium w-16 shrink-0">#{o.id}</span>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-[var(--admin-text-secondary)] line-clamp-1">{o.items?.map((i: any) => `${i.name} x${i.quantity}`).join(", ")}</p>
-          {o.payment_method && (
-            <p className="text-[10px] text-[var(--admin-text-muted)] mt-0.5">{o.payment_method}</p>
-          )}
+      <div key={o.id} onClick={() => setSelected(o)} className={rowBaseClasses(o)}>
+        {/* MOBILE: compact card layout */}
+        <div className="md:hidden space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm font-mono text-[var(--admin-text)] font-medium shrink-0">#{o.id}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0 ${s.cls}`}>{s.label}</span>
+            </div>
+            <span className="text-sm font-bold text-[var(--admin-accent)] shrink-0">${Number(o.total).toFixed(0)}</span>
+          </div>
+          <p className="text-xs text-[var(--admin-text-secondary)] line-clamp-2 leading-relaxed">{itemsText}</p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-[var(--admin-text-muted)] flex items-center gap-1 min-w-0">
+              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              <span className="truncate">{o.phone || "\u2014"}</span>
+            </span>
+            <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0">{timeAgo(o.created_at)}</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div onClick={(e) => e.stopPropagation()}>
+              <select
+                value={o.status}
+                onChange={(e) => changeStatus(o.id, e.target.value)}
+                className={`text-[10px] px-2 py-1 rounded-full border font-medium cursor-pointer ${s.cls}`}>
+                {["pending","preparing","delivered","cancelled"].map(st => (
+                  <option key={st} value={st} className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">{(STATUS as any)[st]?.label || st}</option>
+                ))}
+              </select>
+            </div>
+            {isCard ? (
+              ps ? <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${ps.cls}`}>{ps.label}</span> : null
+            ) : (
+              <div onClick={(e) => e.stopPropagation()}>
+                <select
+                  value={o.payment_status || "pending"}
+                  onChange={(e) => changePaymentStatus(o.id, e.target.value)}
+                  className={`text-[10px] px-2 py-1 rounded-full border font-medium cursor-pointer ${(PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""}`}>
+                  <option value="pending" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Pendiente</option>
+                  <option value="approved" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Aprobado</option>
+                  <option value="rejected" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Rechazado</option>
+                </select>
+              </div>
+            )}
+          </div>
         </div>
-        <span className="text-xs text-[var(--admin-text-muted)] flex items-center gap-1 shrink-0">
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-          </svg>
-          {o.phone || "\u2014"}
-        </span>
-        <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "90px" }}>
-          <select
-            value={o.status}
-            onChange={(e) => changeStatus(o.id, e.target.value)}
-            className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${s.cls}`}>
-            {["pending","preparing","delivered","cancelled"].map(st => (
-              <option key={st} value={st} className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">{(STATUS as any)[st]?.label || st}</option>
-            ))}
-          </select>
-        </div>
-        {isCard ? (
-          ps ? <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span> : null
-        ) : (
-          <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "100px" }}>
+
+        {/* DESKTOP: table row layout */}
+        <div className="hidden md:flex items-center gap-4">
+          <span className="text-sm font-mono text-[var(--admin-text)] font-medium w-16 shrink-0">#{o.id}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-[var(--admin-text-secondary)] line-clamp-1">{itemsText}</p>
+            {o.payment_method && (
+              <p className="text-[10px] text-[var(--admin-text-muted)] mt-0.5">{o.payment_method}</p>
+            )}
+          </div>
+          <span className="text-xs text-[var(--admin-text-muted)] flex items-center gap-1 shrink-0">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            {o.phone || "\u2014"}
+          </span>
+          <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "90px" }}>
             <select
-              value={o.payment_status || "pending"}
-              onChange={(e) => changePaymentStatus(o.id, e.target.value)}
-              className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${(PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""}`}>
-              <option value="pending" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Pendiente</option>
-              <option value="approved" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Aprobado</option>
-              <option value="rejected" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Rechazado</option>
+              value={o.status}
+              onChange={(e) => changeStatus(o.id, e.target.value)}
+              className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${s.cls}`}>
+              {["pending","preparing","delivered","cancelled"].map(st => (
+                <option key={st} value={st} className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">{(STATUS as any)[st]?.label || st}</option>
+              ))}
             </select>
           </div>
-        )}
-        <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
-        <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
+          {isCard ? (
+            ps ? <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium shrink-0 ${ps.cls}`}>{ps.label}</span> : null
+          ) : (
+            <div onClick={(e) => e.stopPropagation()} className="shrink-0" style={{ width: "100px" }}>
+              <select
+                value={o.payment_status || "pending"}
+                onChange={(e) => changePaymentStatus(o.id, e.target.value)}
+                className={`text-[10px] px-2 py-1 w-full rounded-full border font-medium cursor-pointer text-center ${(PAYMENT_STATUS as any)[o.payment_status || "pending"]?.cls || ""}`}>
+                <option value="pending" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Pendiente</option>
+                <option value="approved" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Aprobado</option>
+                <option value="rejected" className="bg-[var(--admin-bg-secondary)] text-[var(--admin-text)]">Pago Rechazado</option>
+              </select>
+            </div>
+          )}
+          <span className="text-sm font-semibold text-[var(--admin-accent)] shrink-0 w-16 text-right">${Number(o.total).toFixed(0)}</span>
+          <span className="text-[10px] text-[var(--admin-text-muted)] shrink-0 w-20 text-right">{timeAgo(o.created_at)}</span>
+        </div>
       </div>
     );
   };
@@ -355,7 +408,7 @@ export default function AdminOrders() {
           className="md:hidden mb-4 w-10 h-10 rounded-xl bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] flex items-center justify-center text-[var(--admin-text-muted)] hover:text-[var(--admin-text)] transition-colors">
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-xl font-semibold text-[var(--admin-text)]">Pedidos</h1>
             <p className="text-xs text-[var(--admin-text-muted)] mt-0.5">
@@ -363,13 +416,13 @@ export default function AdminOrders() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <button onClick={() => setShowReport(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-semibold">
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              className="flex items-center gap-1.5 px-3 py-2 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all font-semibold whitespace-nowrap">
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Generar Reporte
+              Reporte
             </button>
 
             <div className="flex bg-[var(--admin-bg-secondary)] border border-[var(--admin-border)] rounded-xl p-1">
@@ -386,18 +439,22 @@ export default function AdminOrders() {
         </div>
 
         {/* Date filter */}
-        <div className="flex items-center gap-3 mb-4 p-4 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-bg-secondary)]">
-          <svg className="w-4 h-4 text-[var(--admin-accent)] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 p-3 sm:p-4 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-bg-secondary)]">
+          <svg className="w-4 h-4 text-[var(--admin-accent)] shrink-0 hidden sm:block" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider shrink-0">Desde</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
-            className="px-3 py-1.5 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
-          <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider shrink-0">Hasta</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={today}
-            className="px-3 py-1.5 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all" />
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider shrink-0">Desde</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} max={dateTo}
+              className="px-2.5 py-1.5 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all w-full sm:w-auto" />
+          </div>
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <label className="text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider shrink-0">Hasta</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} min={dateFrom} max={today}
+              className="px-2.5 py-1.5 rounded-lg border border-[var(--admin-border)] bg-[var(--admin-bg-input)] text-xs text-[var(--admin-text)] focus:outline-none focus:border-[var(--admin-accent)]/50 transition-all w-full sm:w-auto" />
+          </div>
           <button onClick={handleFilter}
-            className="px-4 py-1.5 bg-[var(--admin-accent)] text-white text-xs rounded-lg hover:bg-[var(--admin-accent-hover)] font-medium transition-all">
+            className="px-4 py-1.5 bg-[var(--admin-accent)] text-white text-xs rounded-lg hover:bg-[var(--admin-accent-hover)] font-medium transition-all whitespace-nowrap">
             Filtrar
           </button>
         </div>
@@ -417,7 +474,7 @@ export default function AdminOrders() {
           <div className="flex-1 min-w-0">
             {viewMode === "list" ? (
               <div className="space-y-2">
-                <div className="flex items-center gap-4 px-4 py-2 text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">
+                <div className="hidden md:flex items-center gap-4 px-4 py-2 text-[10px] text-[var(--admin-text-muted)] uppercase tracking-wider">
                   <span className="w-16 shrink-0">#ID</span>
                   <span className="flex-1">Productos</span>
                   <span className="shrink-0 w-20">Tel</span>
@@ -429,7 +486,7 @@ export default function AdminOrders() {
                 {sortedOrders.map(o => renderListRow(o))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
                 {STATUS_ORDER.map(status => {
                   const st = STATUS[status];
                   const cols = sortedOrders.filter(o => o.status === status);
@@ -475,34 +532,32 @@ export default function AdminOrders() {
             )}
           </div>
 
-          {/* Detail panel */}
+          {/* Detail panel: overlay on mobile, side on desktop */}
           {selected && (
-            <div className="w-80 shrink-0 animate-fade-up">
-              <div className="sticky top-6 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] overflow-hidden">
-                <div className="p-5 border-b border-[var(--admin-border)] flex items-center justify-between">
+            <>
+              <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setSelected(null)} />
+              <div className="md:hidden fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl border border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] animate-slide-right">
+                <div className="sticky top-0 z-10 p-4 border-b border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] rounded-t-2xl flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-[var(--admin-text)]">Pedido #{selected.id}</h3>
                     <p className="text-[10px] text-[var(--admin-text-muted)]">{formatDate(selected.created_at)}</p>
                   </div>
                   <button onClick={() => setSelected(null)}
-                    className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:bg-[var(--admin-bg-tertiary)] transition-all">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    className="p-2 rounded-xl text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:bg-[var(--admin-bg-tertiary)] transition-all">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-
-                <div className="p-5 space-y-4">
+                <div className="p-4 space-y-4">
                   <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
                     <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Cliente</p>
                     <p className="text-[var(--admin-text)] font-medium text-sm">{selected.phone || "Sin telefono"}</p>
                   </div>
-
                   <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
                     <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Fecha y Hora</p>
                     <p className="text-[var(--admin-text)] text-sm">{formatDate(selected.created_at)}</p>
                   </div>
-
                   <div>
                     <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Productos</p>
                     <div className="space-y-1.5">
@@ -517,12 +572,10 @@ export default function AdminOrders() {
                       ))}
                     </div>
                   </div>
-
                   <div className="border-t border-[var(--admin-border)] pt-3 flex justify-between">
                     <span className="text-sm font-semibold text-[var(--admin-text)]">Total</span>
                     <span className="text-sm font-bold text-[var(--admin-accent)]">${Number(selected.total).toFixed(0)}</span>
                   </div>
-
                   {selected.mp_payment_id && (
                     <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
                       <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Pago Mercado Pago</p>
@@ -534,7 +587,6 @@ export default function AdminOrders() {
                       )}
                     </div>
                   )}
-
                   <div className="border-t border-[var(--admin-border)] pt-3">
                     <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Cambiar estado</p>
                     <div className="space-y-1.5">
@@ -555,14 +607,12 @@ export default function AdminOrders() {
                       })}
                     </div>
                   </div>
-
                   {selected.notes && (
                     <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
                       <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Notas</p>
                       <p className="text-xs text-[var(--admin-text-secondary)]">{selected.notes}</p>
                     </div>
                   )}
-
                   <div className="border-t border-[var(--admin-border)] pt-3">
                     <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Estado del pago</p>
                     {selected.payment_method === "Tarjeta" ? (
@@ -592,9 +642,127 @@ export default function AdminOrders() {
                       </div>
                     )}
                   </div>
+                  <div className="pb-2">
+                    <button onClick={() => setSelected(null)}
+                      className="w-full py-2.5 border border-[var(--admin-border)] text-sm text-[var(--admin-text-secondary)] rounded-xl hover:bg-[var(--admin-bg-hover)] transition-all font-medium">
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* DESKTOP: side panel */}
+              <div className="hidden md:block w-80 shrink-0 animate-fade-up">
+                <div className="sticky top-6 rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-bg-secondary)] overflow-hidden">
+                  <div className="p-5 border-b border-[var(--admin-border)] flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[var(--admin-text)]">Pedido #{selected.id}</h3>
+                      <p className="text-[10px] text-[var(--admin-text-muted)]">{formatDate(selected.created_at)}</p>
+                    </div>
+                    <button onClick={() => setSelected(null)}
+                      className="p-1.5 rounded-lg text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:bg-[var(--admin-bg-tertiary)] transition-all">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                      <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Cliente</p>
+                      <p className="text-[var(--admin-text)] font-medium text-sm">{selected.phone || "Sin telefono"}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                      <p className="text-[var(--admin-text-muted)] text-[10px] uppercase mb-1 font-semibold">Fecha y Hora</p>
+                      <p className="text-[var(--admin-text)] text-sm">{formatDate(selected.created_at)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-2 font-semibold">Productos</p>
+                      <div className="space-y-1.5">
+                        {selected.items?.map((i: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center py-1.5 px-3 rounded-lg bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-[var(--admin-text-muted)] bg-[var(--admin-bg-tertiary)] px-1.5 py-0.5 rounded font-medium">{i.quantity}x</span>
+                              <span className="text-sm text-[var(--admin-text)]">{i.name}</span>
+                            </div>
+                            <span className="text-xs text-[var(--admin-text-secondary)]">${(Number(i.price) * i.quantity).toFixed(0)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="border-t border-[var(--admin-border)] pt-3 flex justify-between">
+                      <span className="text-sm font-semibold text-[var(--admin-text)]">Total</span>
+                      <span className="text-sm font-bold text-[var(--admin-accent)]">${Number(selected.total).toFixed(0)}</span>
+                    </div>
+                    {selected.mp_payment_id && (
+                      <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                        <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Pago Mercado Pago</p>
+                        <p className="text-[11px] text-[var(--admin-text-secondary)] font-mono">{selected.mp_payment_id}</p>
+                        {selected.payment_status && PAYMENT_STATUS[selected.payment_status] && (
+                          <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full border font-medium ${PAYMENT_STATUS[selected.payment_status].cls}`}>
+                            {PAYMENT_STATUS[selected.payment_status].label}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div className="border-t border-[var(--admin-border)] pt-3">
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Cambiar estado</p>
+                      <div className="space-y-1.5">
+                        {STATUS_ORDER.map(s => {
+                          const st = STATUS[s];
+                          const isActive = selected.status === s;
+                          return (
+                            <button key={s} onClick={() => changeStatus(selected.id, s)}
+                              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
+                                isActive ? `${st.cls} border-current shadow-sm` : "border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:border-[var(--admin-border-hover)]"
+                              }`}>
+                              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={st.icon} />
+                              </svg>
+                              {st.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {selected.notes && (
+                      <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                        <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-1 font-semibold">Notas</p>
+                        <p className="text-xs text-[var(--admin-text-secondary)]">{selected.notes}</p>
+                      </div>
+                    )}
+                    <div className="border-t border-[var(--admin-border)] pt-3">
+                      <p className="text-[10px] text-[var(--admin-text-muted)] uppercase mb-3 font-semibold">Estado del pago</p>
+                      {selected.payment_method === "Tarjeta" ? (
+                        <div className="p-3 rounded-xl bg-[var(--admin-bg)] border border-[var(--admin-border)]">
+                          <p className="text-[10px] text-[var(--admin-text-muted)] mb-1">Gestionado por Mercado Pago (webhook)</p>
+                          {PAYMENT_STATUS[selected.payment_status] && (
+                            <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium ${PAYMENT_STATUS[selected.payment_status].cls}`}>
+                              {PAYMENT_STATUS[selected.payment_status].label}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {(["pending", "approved", "rejected"] as const).map(ps => {
+                            const info = PAYMENT_STATUS[ps];
+                            const isActive = (selected.payment_status || "pending") === ps;
+                            return (
+                              <button key={ps} onClick={() => changePaymentStatus(selected.id, ps)}
+                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium transition-all border ${
+                                  isActive ? `${info.cls} border-current shadow-sm` : "border-[var(--admin-border)] text-[var(--admin-text-muted)] hover:text-[var(--admin-text-secondary)] hover:border-[var(--admin-border-hover)]"
+                                }`}>
+                                <span className={`w-2 h-2 rounded-full ${ps === "approved" ? "bg-emerald-500" : ps === "rejected" ? "bg-red-500" : "bg-amber-500"}`} />
+                                {info.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>
