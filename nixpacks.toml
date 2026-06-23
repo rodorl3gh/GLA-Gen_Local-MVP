@@ -4,6 +4,8 @@ providers = ["node"]
 NIXPACKS_NODE_VERSION = "22"
 NEXT_PUBLIC_MP_MODE = "production"
 NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY = "APP_USR-d0c7119a-128d-4914-ba5c-09ab930c3e6d"
+NEXT_PUBLIC_SUPABASE_URL = "https://jjplupzhtpkjfqzlfsoh.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_XFKTzdua4PQXlUwpQnn6aQ_BtASbEJw"
 
 [phases.setup]
 nixPkgs = ["nodejs_22", "npm-10_x", "python3", "gcc", "gnumake"]
