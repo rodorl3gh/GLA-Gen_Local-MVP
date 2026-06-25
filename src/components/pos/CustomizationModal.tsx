@@ -81,11 +81,17 @@ export default function CustomizationModal({ product, open, onClose, onAdd }: Pr
 
   if (!open) return null;
 
+  const imgUrl = product.image_path?.startsWith("/uploads/")
+    ? product.image_path
+    : product.image_path
+      ? `/uploads/catalog/${product.image_path.replace(/\\/g, "/").split("/").pop()}`
+      : null;
+
   return (
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
+        <div className="relative bg-white rounded-2xl w-full max-w-sm shadow-2xl animate-scale-in max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="p-4 border-b border-[var(--brand-border)] flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-[var(--brand-bg)] overflow-hidden flex-shrink-0">
@@ -233,6 +239,23 @@ export default function CustomizationModal({ product, open, onClose, onAdd }: Pr
               Agregar {quantity > 1 ? `${quantity} ` : ""}al pedido
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Floating description panel */}
+      <div className="fixed z-50 hidden lg:block pointer-events-none"
+        style={{ top: "50%", left: "50%", transform: "translate(calc(-50% + 200px), -50%)" }}>
+        <div className="bg-gray-900 text-white rounded-xl p-3 w-44 shadow-2xl opacity-90">
+          <div className="flex items-center gap-2 mb-2">
+            {imgUrl ? (
+              <img src={imgUrl} alt={product.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
+            ) : null}
+            <p className="text-[10px] font-semibold leading-tight">{product.name}</p>
+          </div>
+          {product.description && (
+            <p className="text-[9px] text-gray-300 leading-relaxed">{product.description}</p>
+          )}
+          <p className="text-[8px] text-gray-400 mt-1.5 uppercase tracking-wider">{product.category}</p>
         </div>
       </div>
     </>
