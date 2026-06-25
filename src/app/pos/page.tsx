@@ -39,18 +39,15 @@ const GRID_COLS_KEY = "pos_grid_cols";
 const MAX_FAVORITES = 5;
 
 function loadFavorites(): FavoriteItem[] {
-  try { const raw = localStorage.getItem(FAVORITES_KEY); return raw ? JSON.parse(raw) : []; }
-  catch { return []; }
+  try { const raw = localStorage.getItem(FAVORITES_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 function saveFavorites(items: FavoriteItem[]) { localStorage.setItem(FAVORITES_KEY, JSON.stringify(items)); }
 function loadCart(): CartItem[] {
-  try { const raw = localStorage.getItem(CART_KEY); return raw ? JSON.parse(raw) : []; }
-  catch { return []; }
+  try { const raw = localStorage.getItem(CART_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 function saveCart(items: CartItem[]) { localStorage.setItem(CART_KEY, JSON.stringify(items)); }
 function loadGridCols(): number {
-  try { const raw = localStorage.getItem(GRID_COLS_KEY); return raw ? Math.max(3, Math.min(8, parseInt(raw))) : 5; }
-  catch { return 5; }
+  try { const raw = localStorage.getItem(GRID_COLS_KEY); return raw ? Math.max(3, Math.min(8, parseInt(raw))) : 5; } catch { return 5; }
 }
 
 export function getImageUrl(img: string | undefined | null): string | null {
@@ -73,11 +70,21 @@ export default function PosPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [gridCols, setGridCols] = useState(5);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
   const [promoSelections, setPromoSelections] = useState<Record<number, number>>({});
   const [promoSlotSelections, setPromoSlotSelections] = useState<Record<number, number>>({});
+
+  // Detect mobile
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => { setFavorites(loadFavorites()); const sc = loadCart(); if (sc.length > 0) setCart(sc); setGridCols(loadGridCols()); }, []);
   useEffect(() => { saveCart(cart); }, [cart]);
@@ -119,6 +126,7 @@ export default function PosPage() {
   const handleAddToCart = (item: CartItem) => {
     if (editIndex !== null) { setCart(prev => prev.map((ci, i) => i === editIndex ? item : ci)); setEditIndex(null); }
     else { setCart(prev => [...prev, item]); }
+    if (isMobile) setCartOpen(true);
   };
   const handleEdit = (index: number) => {
     const item = cart[index]; if (item.isPromo) return;
@@ -146,13 +154,17 @@ export default function PosPage() {
     }
     setCart(prev => [...prev, { id: -(selectedPromo.id + 10000), name: selectedPromo.name, price: selectedPromo.price, quantity: 1, notes: "", image_path: selectedPromo.image_path, category: selectedPromo.type === "promotion" ? "Promocion" : "Paquete", isPromo: true, promoSubItems: subItems }]);
     setShowPromoModal(false); setSelectedPromo(null);
+    if (isMobile) setCartOpen(true);
   };
   const promoProduct = (id: number) => products.find(p => p.id === id);
 
   const filteredProducts = activeCategory === "Todas" ? products : products.filter(p => (p.category || "General") === activeCategory);
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Compute favorites to render in grid
+  const effectiveCols = isMobile ? Math.min(4, gridCols) : gridCols;
+  const gridStyle = useMemo(() => ({ gridTemplateColumns: `repeat(${effectiveCols}, minmax(0, 1fr))` }), [effectiveCols]);
+
   const { favProducts, favPromos, restProducts, hasFavorites } = useMemo(() => {
     const fp: Product[] = [];
     const fpr: Promotion[] = [];
@@ -165,13 +177,19 @@ export default function PosPage() {
     return { favProducts: fp, favPromos: fpr, restProducts: rp, hasFavorites: fp.length + fpr.length > 0 };
   }, [favorites, products, promotions, filteredProducts]);
 
+  const CartContent = (
+    <PosCartPanel cart={cart} onUpdateQuantity={updateQuantity} onEdit={handleEdit} onRemove={removeItem}
+      onReset={resetCart} onCheckout={() => { setShowCheckout(true); if (isMobile) setCartOpen(false); }}
+      showClose={isMobile} onClose={() => setCartOpen(false)} />
+  );
+
   return (
-    <div className="h-screen flex flex-col bg-[var(--brand-bg)] overflow-hidden">
+    <div className="h-[100dvh] flex flex-col bg-[var(--brand-bg)] overflow-hidden">
       {/* Top Header */}
-      <header className="flex-shrink-0 px-4 sm:px-6 py-2 bg-white border-b border-[var(--brand-border)]">
+      <header className="flex-shrink-0 px-3 sm:px-6 py-2 bg-white border-b border-[var(--brand-border)]">
         <div className="flex items-center justify-between">
-          <h1 className="text-sm font-bold text-[var(--brand-text)]">
-            Punto de Venta <span className="text-[var(--brand-text-muted)] font-normal">| Cafeteria Luna</span>
+          <h1 className="text-xs sm:text-sm font-bold text-[var(--brand-text)]">
+            Punto de Venta <span className="text-[var(--brand-text-muted)] font-normal hidden sm:inline">| Cafeteria Luna</span>
           </h1>
           <a href="/admin" className="text-[10px] font-medium text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] transition-colors">Admin</a>
         </div>
@@ -181,42 +199,41 @@ export default function PosPage() {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Category tabs + slider */}
-          <div className="flex-shrink-0 px-4 sm:px-6 py-2 bg-white border-b border-[var(--brand-border)] overflow-x-auto">
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1.5 pr-2 mr-1 border-r border-[var(--brand-border)] flex-shrink-0">
+          <div className="flex-shrink-0 px-3 sm:px-6 py-1.5 sm:py-2 bg-white border-b border-[var(--brand-border)] overflow-x-auto">
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              {/* Size slider — hide on very small screens, show on sm+ */}
+              <div className="hidden sm:flex items-center gap-1.5 pr-2 mr-1 border-r border-[var(--brand-border)] flex-shrink-0">
                 <svg className="w-3.5 h-3.5 text-[var(--brand-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                 </svg>
                 <input type="range" min="3" max="8" value={gridCols} onChange={(e) => setGridCols(parseInt(e.target.value))}
-                  className="w-16 h-1.5 bg-[var(--brand-primary)]/20 rounded-full appearance-none cursor-pointer"
-                  style={{ accentColor: "var(--brand-primary)" }} title="Tamaño de productos" />
+                  className="w-14 sm:w-16 h-1.5 bg-[var(--brand-primary)]/20 rounded-full appearance-none cursor-pointer"
+                  style={{ accentColor: "var(--brand-primary)" }} title="Tamaño" />
                 <span className="text-[10px] font-semibold text-[var(--brand-primary)] min-w-[10px]">{gridCols}</span>
               </div>
               {categories.map(cat => (
                 <button key={cat} onClick={() => setActiveCategory(cat)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${activeCategory === cat ? "bg-[var(--brand-primary)] text-white shadow-sm" : "bg-gray-100 text-[var(--brand-text-secondary)] hover:bg-gray-200"}`}>{cat}</button>
+                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-[11px] font-medium whitespace-nowrap transition-all ${activeCategory === cat ? "bg-[var(--brand-primary)] text-white shadow-sm" : "bg-gray-100 text-[var(--brand-text-secondary)] hover:bg-gray-200"}`}>{cat}</button>
               ))}
             </div>
           </div>
 
           {/* Scrollable product area */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-            {/* FAVORITES ROW — inside the same CSS grid = identical sizing */}
+          <div className={`flex-1 overflow-y-auto p-3 sm:p-4 sm:p-6 ${isMobile ? "pb-20" : ""}`}>
+            {/* FAVORITES ROW */}
             {hasFavorites && (
               <div className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
                   <svg className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                  <span className="text-[11px] font-bold text-yellow-600 uppercase tracking-wider">Favoritos</span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-yellow-600 uppercase tracking-wider">Favoritos</span>
                   <div className="flex-1 h-px bg-yellow-200" />
                 </div>
-                <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
-                  {/* Favorited products */}
+                <div className="grid gap-2 sm:gap-2.5" style={gridStyle}>
                   {favProducts.map(product => (
                     <PosProductCard key={`fav-p-${product.id}`} product={product}
                       isFavorite={true} onToggleFavorite={(id) => toggleFavorite(id, "product")}
                       onSelect={handleSelectProduct} />
                   ))}
-                  {/* Favorited promos */}
                   {favPromos.map(promo => (
                     <div key={`fav-r-${promo.id}`} className="relative">
                       <button onClick={() => openPromoModal(promo)}
@@ -233,10 +250,10 @@ export default function PosPage() {
                             {promo.type === "promotion" ? "Promo" : "Paquete"}
                           </span>
                         </div>
-                        <div className="p-2.5">
+                        <div className="p-2 sm:p-2.5">
                           <div className="flex items-start justify-between gap-1">
-                            <h3 className="text-xs font-semibold text-[var(--brand-text)] leading-snug">{promo.name}</h3>
-                            <span className="text-sm font-bold text-[var(--brand-primary)]">${promo.price.toFixed(0)}</span>
+                            <h3 className="text-[10px] sm:text-xs font-semibold text-[var(--brand-text)] leading-snug">{promo.name}</h3>
+                            <span className="text-xs sm:text-sm font-bold text-[var(--brand-primary)]">${promo.price.toFixed(0)}</span>
                           </div>
                         </div>
                       </button>
@@ -251,7 +268,7 @@ export default function PosPage() {
             )}
 
             {/* Products grid */}
-            <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
+            <div className="grid gap-2 sm:gap-2.5" style={gridStyle}>
               {restProducts.map(product => (
                 <PosProductCard key={product.id} product={product}
                   isFavorite={isFavorite(product.id, "product")}
@@ -266,12 +283,12 @@ export default function PosPage() {
 
             {/* Promotions section */}
             {promotions.length > 0 && (
-              <div className="mt-8">
-                <div className="mb-4">
-                  <h2 className="text-xs font-bold text-[var(--brand-text)] uppercase tracking-[0.15em]">Ofertas y Paquetes</h2>
+              <div className="mt-6 sm:mt-8">
+                <div className="mb-3 sm:mb-4">
+                  <h2 className="text-[11px] sm:text-xs font-bold text-[var(--brand-text)] uppercase tracking-[0.15em]">Ofertas y Paquetes</h2>
                   <div className="w-8 h-0.5 bg-[var(--brand-primary)] mt-1 rounded-full" />
                 </div>
-                <div className="grid gap-2.5" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
+                <div className="grid gap-2 sm:gap-2.5" style={gridStyle}>
                   {promotions.filter(p => !isFavorite(p.id, "promo")).map(promo => (
                     <div key={promo.id} className="relative">
                       <button onClick={() => openPromoModal(promo)}
@@ -288,10 +305,10 @@ export default function PosPage() {
                             {promo.type === "promotion" ? "Promo" : "Paquete"}
                           </span>
                         </div>
-                        <div className="p-2.5">
+                        <div className="p-2 sm:p-2.5">
                           <div className="flex items-start justify-between gap-1">
-                            <h3 className="text-xs font-semibold text-[var(--brand-text)] leading-snug">{promo.name}</h3>
-                            <span className="text-sm font-bold text-[var(--brand-primary)]">${promo.price.toFixed(0)}</span>
+                            <h3 className="text-[10px] sm:text-xs font-semibold text-[var(--brand-text)] leading-snug">{promo.name}</h3>
+                            <span className="text-xs sm:text-sm font-bold text-[var(--brand-primary)]">${promo.price.toFixed(0)}</span>
                           </div>
                         </div>
                       </button>
@@ -308,11 +325,36 @@ export default function PosPage() {
           </div>
         </div>
 
-        {/* Cart panel */}
-        <div className="w-[22rem] flex-shrink-0">
-          <PosCartPanel cart={cart} onUpdateQuantity={updateQuantity} onEdit={handleEdit} onRemove={removeItem} onReset={resetCart} onCheckout={() => setShowCheckout(true)} />
+        {/* Desktop cart panel — hidden on mobile */}
+        <div className="hidden md:block w-[22rem] flex-shrink-0 border-l border-[var(--brand-border)]">
+          {CartContent}
         </div>
       </div>
+
+      {/* Mobile cart drawer overlay */}
+      {isMobile && cartOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setCartOpen(false)} />
+          <div className="fixed inset-y-0 right-0 w-full max-w-sm z-50 animate-slide-right shadow-2xl">
+            {CartContent}
+          </div>
+        </>
+      )}
+
+      {/* Mobile floating cart button */}
+      {isMobile && !cartOpen && (
+        <button onClick={() => setCartOpen(true)}
+          className="fixed bottom-5 right-5 z-30 w-14 h-14 rounded-full bg-[var(--brand-accent)] text-white shadow-lg hover:bg-emerald-600 transition-all active:scale-95 flex items-center justify-center">
+          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+          </svg>
+          {cartCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shadow">
+              {cartCount > 99 ? "99+" : cartCount}
+            </span>
+          )}
+        </button>
+      )}
 
       <CustomizationModal
         product={selectedProduct || { id: 0, name: "", description: "", price: 0, category: "", image_path: "", active: 1 }}
@@ -340,12 +382,17 @@ export default function PosPage() {
                     <div className="space-y-2">{eligibleIds.map(pid => { const p = promoProduct(pid); if (!p) return null; const q = promoSelections[pid] || 0; const max = picked >= pickCount;
                       return (<div key={pid} className="flex items-center justify-between p-3 rounded-xl border border-[var(--brand-border)] bg-gray-50"><div><p className="text-sm font-medium text-[var(--brand-text)]">{p.name}</p><p className="text-[10px] text-[var(--brand-text-muted)]">{p.category}</p></div>
                         <div className="flex items-center gap-2"><button onClick={() => setPromoSelections(prev => ({ ...prev, [pid]: Math.max(0, (prev[pid] || 0) - 1) }))} disabled={q === 0} className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm disabled:opacity-30">-</button>
-                        <span className="w-5 text-center text-sm font-medium">{q}</span><button onClick={() => setPromoSelections(prev => ({ ...prev, [pid]: (prev[pid] || 0) + 1 }))} disabled={max} className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm disabled:opacity-30">+</button></div></div>); })}</div></>); })()}
+                        <span className="w-5 text-center text-sm font-medium">{q}</span><button onClick={() => setPromoSelections(prev => ({ ...prev, [pid]: (prev[pid] || 0) + 1 }))} disabled={max} className="w-7 h-7 rounded-lg border border-[var(--brand-border)] flex items-center justify-center text-sm disabled:opacity-30">+</button></div></div>);
+                    })}</div></>);
+                })()}
                 {selectedPromo.type === "package" && (() => {
                   const cfg = selectedPromo.config || {}; const slots: any[] = cfg.slots || [];
                   return (<div className="space-y-4">{slots.map((slot: any, idx: number) => { const eligibleIds: number[] = slot.eligibleProductIds || []; const sel = promoSlotSelections[idx];
                     return (<div key={idx}><p className="text-[10px] font-semibold text-[var(--brand-text-muted)] uppercase tracking-wider mb-2">{slot.label}</p><div className="space-y-1">{eligibleIds.map(pid => { const p = promoProduct(pid); if (!p) return null;
-                      return (<button key={pid} onClick={() => setPromoSlotSelections(prev => ({ ...prev, [idx]: pid }))} className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${sel === pid ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-[var(--brand-border)] bg-gray-50 hover:border-[var(--brand-primary-light)]"}`}><div><p className="text-sm font-medium text-[var(--brand-text)]">{p.name}</p><p className="text-[10px] text-[var(--brand-text-muted)]">{p.category}</p></div>{sel === pid && <svg className="w-5 h-5 text-[var(--brand-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}</button>); })}</div></div>); })}</div>); })()}
+                      return (<button key={pid} onClick={() => setPromoSlotSelections(prev => ({ ...prev, [idx]: pid }))} className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all text-left ${sel === pid ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-[var(--brand-border)] bg-gray-50 hover:border-[var(--brand-primary-light)]"}`}><div><p className="text-sm font-medium text-[var(--brand-text)]">{p.name}</p><p className="text-[10px] text-[var(--brand-text-muted)]">{p.category}</p></div>{sel === pid && <svg className="w-5 h-5 text-[var(--brand-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}</button>);
+                    })}</div></div>);
+                  })}</div>);
+                })()}
                 <div className="border-t border-[var(--brand-border)] pt-4 flex items-center justify-between"><span className="text-xs text-[var(--brand-text-secondary)]">Precio del {selectedPromo.type === "promotion" ? "promocion" : "paquete"}</span><span className="text-xl font-bold text-[var(--brand-primary)]">${selectedPromo.price.toFixed(0)}</span></div>
                 <button onClick={addPromoToCart} className="w-full py-2.5 bg-[var(--brand-primary)] text-white text-sm font-semibold rounded-xl hover:bg-[var(--brand-primary-dark)] transition-all active:scale-[0.98]">Agregar al Pedido</button>
               </div>
