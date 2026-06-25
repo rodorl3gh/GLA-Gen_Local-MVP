@@ -265,42 +265,19 @@ export default function PosPage() {
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-  // Dynamic grid class based on gridCols
-  const gridClass = `grid grid-cols-2 sm:grid-cols-3 md:grid-cols-${Math.min(gridCols, 4)} lg:grid-cols-${Math.min(gridCols, 6)} xl:grid-cols-${gridCols}`;
-
   // ── Render ──
   return (
     <div className="h-screen flex flex-col bg-[var(--brand-bg)] overflow-hidden">
       {/* Top Header */}
       <header className="flex-shrink-0 px-4 sm:px-6 py-2 bg-white border-b border-[var(--brand-border)]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-bold text-[var(--brand-text)]">
-              Punto de Venta <span className="text-[var(--brand-text-muted)] font-normal">| Cafeteria Luna</span>
-            </h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Image size slider */}
-            <div className="hidden sm:flex items-center gap-1.5">
-              <svg className="w-3 h-3 text-[var(--brand-text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-              <input
-                type="range"
-                min="3"
-                max="8"
-                value={gridCols}
-                onChange={(e) => setGridCols(parseInt(e.target.value))}
-                className="w-20 h-1 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[var(--brand-primary)]"
-                title="Tamaño de productos"
-              />
-              <span className="text-[9px] text-[var(--brand-text-muted)]">{gridCols}</span>
-            </div>
-            <a href="/admin"
-              className="text-[10px] font-medium text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] transition-colors">
-              Admin
-            </a>
-          </div>
+          <h1 className="text-sm font-bold text-[var(--brand-text)]">
+            Punto de Venta <span className="text-[var(--brand-text-muted)] font-normal">| Cafeteria Luna</span>
+          </h1>
+          <a href="/admin"
+            className="text-[10px] font-medium text-[var(--brand-text-muted)] hover:text-[var(--brand-primary)] transition-colors">
+            Admin
+          </a>
         </div>
         {/* Favorites bar */}
         <div className="mt-1.5">
@@ -308,6 +285,7 @@ export default function PosPage() {
             favorites={favorites}
             products={products}
             promotions={promotions}
+            gridCols={gridCols}
             onSelectProduct={handleSelectProduct}
             onSelectPromo={openPromoModal}
           />
@@ -320,7 +298,24 @@ export default function PosPage() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Category tabs */}
           <div className="flex-shrink-0 px-4 sm:px-6 py-2 bg-white border-b border-[var(--brand-border)] overflow-x-auto">
-            <div className="flex gap-1.5">
+            <div className="flex items-center gap-1.5">
+              {/* Size slider — contrasting */}
+              <div className="flex items-center gap-1.5 pr-2 mr-1 border-r border-[var(--brand-border)] flex-shrink-0">
+                <svg className="w-3.5 h-3.5 text-[var(--brand-primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                <input
+                  type="range"
+                  min="3"
+                  max="8"
+                  value={gridCols}
+                  onChange={(e) => setGridCols(parseInt(e.target.value))}
+                  className="w-16 h-1.5 bg-[var(--brand-primary)]/20 rounded-full appearance-none cursor-pointer"
+                  style={{ accentColor: "var(--brand-primary)" }}
+                  title="Tamaño de productos"
+                />
+                <span className="text-[10px] font-semibold text-[var(--brand-primary)] min-w-[10px]">{gridCols}</span>
+              </div>
               {categories.map(cat => (
                 <button key={cat} onClick={() => setActiveCategory(cat)}
                   className={`px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
