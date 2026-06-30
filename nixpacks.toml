@@ -2,6 +2,7 @@ providers = ["node"]
 
 [variables]
 NIXPACKS_NODE_VERSION = "22"
+FLUX_API_KEY = "2d3be5eab9329c4e1e2b0df4d0063d93"
 NEXT_PUBLIC_MP_MODE = "production"
 NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY = "APP_USR-d0c7119a-128d-4914-ba5c-09ab930c3e6d"
 NEXT_PUBLIC_SUPABASE_URL = "https://jjplupzhtpkjfqzlfsoh.supabase.co"

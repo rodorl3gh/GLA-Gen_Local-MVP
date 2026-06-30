@@ -166,17 +166,21 @@ export default function AdminContent() {
         }
       }
 
-      // Step 2: Generate images via DALL-E 3
+      // Step 2: Generate images via Kie AI (GPT Image 2)
       if (needsImages) {
         let imgPrompt = "";
         const productName = selectedProduct ? selectedProduct.name : "producto de cafeteria";
-        const productDesc = selectedProduct?.description ? ` (${selectedProduct.description})` : "";
+        const useProductRef = !!productImageUrl;
 
         if (generateMode === "both" && generatedCaption) {
           const hashtags = (result?.hashtags || []).map((h: string) => h.charAt(0).toLowerCase() + h.slice(1));
-          imgPrompt = `Professional promotional poster for Instagram featuring ${productName}${productDesc}. Coffee shop aesthetic with warm tones, soft natural lighting. No text or letters in the image. High quality photorealistic commercial food photography.`;
+          imgPrompt = useProductRef
+            ? `Transform this product photo into a professional promotional poster for Instagram. Overlay the following text prominently on the image in a clean, modern font: "${generatedCaption}". Include hashtags at the bottom: #${hashtags.join(" #")}. Keep the product visible and attractive. Professional food marketing style, warm tones, high quality.`
+            : `Professional promotional poster for Instagram. Display the following text prominently in a clean modern font: "${generatedCaption}". Include hashtags at the bottom: #${hashtags.join(" #")}. Coffee shop aesthetic, warm tones, high quality photorealistic. ${selectedProduct ? "Product: " + selectedProduct.name : ""}`;
         } else {
-          imgPrompt = `Professional food photography of ${productName}${productDesc}. Cozy coffee shop setting, warm natural lighting, steam, high quality photorealistic commercial photography. Make it look delicious and inviting.`;
+          imgPrompt = useProductRef
+            ? `Professional product photography enhancement. Make this ${productName} look irresistible, warm lighting, cozy coffee shop aesthetic, high quality commercial photography. ${selectedProduct ? selectedProduct.description : ""}`
+            : `Professional food photography of ${productName}. Cozy coffee shop setting, warm natural lighting, steam, high quality photorealistic commercial photography. Make it look delicious and inviting.`;
         }
 
         const imgRes = await fetch("/api/content/generate-image", {
@@ -186,6 +190,7 @@ export default function AdminContent() {
             prompt: imgPrompt,
             aspectRatio,
             count: imageCount,
+            inputImage: useProductRef ? productImageUrl : undefined,
           }),
         });
         const imgData = await imgRes.json();
