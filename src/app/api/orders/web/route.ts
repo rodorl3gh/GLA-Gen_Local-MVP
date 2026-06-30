@@ -11,8 +11,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
     }
 
+    const effectivePhone = phone === "POS" && name ? name : phone;
+
     const orderId = createOrder(
-      phone,
+      effectivePhone,
       items,
       total || 0,
       payment_method || "No especificado",
