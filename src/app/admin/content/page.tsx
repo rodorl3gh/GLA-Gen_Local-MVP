@@ -166,7 +166,7 @@ export default function AdminContent() {
         }
       }
 
-      // Step 2: Generate images via Kie AI (GPT Image 2)
+      // Step 2: Generate images via Kie AI (GPT Image 2) — async polling
       if (needsImages) {
         let imgPrompt = "";
         const productName = selectedProduct ? selectedProduct.name : "producto de cafeteria";
@@ -194,13 +194,54 @@ export default function AdminContent() {
           }),
         });
         const imgData = await imgRes.json();
-        if (imgData.error && !needsText) {
-          setError("Error generando imagen: " + imgData.error);
-        } else if (imgData.error && needsText) {
-          setError("Copy listo. Error en imagen: " + imgData.error);
-        } else if (imgData.images) {
-          setGeneratedImages(imgData.images);
-          savedImages = imgData.images;
+
+        if (imgData.error) {
+          if (!needsText) setError("Error generando imagen: " + imgData.error);
+          else setError("Copy listo. Error en imagen: " + imgData.error);
+        } else if (imgData.taskIds && imgData.taskIds.length > 0) {
+          setGenerating(false);
+          setError("Generando imagenes...");
+
+          const pollForImages = async () => {
+            for (let attempt = 0; attempt < 50; attempt++) {
+              await new Promise(r => setTimeout(r, attempt === 0 ? 4000 : 3000));
+              try {
+                const pollRes = await fetch(`/api/content/generate-image?taskIds=${imgData.taskIds.join(",")}`);
+                const pollData = await pollRes.json();
+                if (pollData.status === "done" && pollData.images.length > 0) {
+                  setGeneratedImages(pollData.images);
+                  savedImages.push(...pollData.images);
+                  setError("");
+
+                  if (generatedCaption || savedImages.length > 0) {
+                    const entry = {
+                      id: Date.now().toString(),
+                      caption: generatedCaption,
+                      date: new Date().toLocaleDateString("es-MX"),
+                      images: [...savedImages],
+                      copyType,
+                      productName: selectedProduct?.name || "",
+                      aspectRatio,
+                    };
+                    setSavedContent(prev => {
+                      const exists = prev.some(i => i.caption === entry.caption && i.productName === entry.productName);
+                      if (exists) return prev;
+                      return [entry, ...prev].slice(0, 30);
+                    });
+                  }
+                  return;
+                }
+                if (pollData.error) {
+                  setError("Error en generacion de imagen: " + pollData.error);
+                  return;
+                }
+              } catch { /* retry */ }
+            }
+            setError("Timeout: las imagenes tardaron demasiado. Intenta de nuevo.");
+          };
+
+          pollForImages();
+          return;
         }
       }
     } catch {

@@ -2,39 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
-async function pollForResult(taskId: string, apiKey: string): Promise<string> {
+async function checkTask(taskId: string, apiKey: string): Promise<{ done: boolean; url?: string; error?: string }> {
   const url = `${KIE_BASE}/recordInfo?taskId=${encodeURIComponent(taskId)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return { done: false };
 
-  for (let attempt = 0; attempt < 40; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt === 1 ? 4000 : 3000));
+    const data = await res.json();
+    const state = data.data?.state || data.state;
 
-    try {
-      const res = await fetch(url, {
-        headers: { "Authorization": `Bearer ${apiKey}` },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!res.ok) continue;
-
-      const data = await res.json();
-      const state = data.data?.state || data.state;
-
-      if (state === "success") {
-        const resultJson = data.data?.resultJson || data.resultJson;
-        if (resultJson) {
-          const parsed = typeof resultJson === "string" ? JSON.parse(resultJson) : resultJson;
-          const urls = parsed.resultUrls || parsed.result_urls || [];
-          if (urls.length > 0) return urls[0];
-        }
+    if (state === "success") {
+      const resultJson = data.data?.resultJson || data.resultJson;
+      if (resultJson) {
+        const parsed = typeof resultJson === "string" ? JSON.parse(resultJson) : resultJson;
+        const urls = parsed.resultUrls || parsed.result_urls || [];
+        if (urls.length > 0) return { done: true, url: urls[0] };
       }
-      if (state === "fail") {
-        throw new Error(data.data?.failMsg || "Generation failed");
-      }
-    } catch (err: any) {
-      if (err.message?.includes("Generation failed")) throw err;
-      if (attempt >= 39) throw err;
+      return { done: true, error: "No image URL in result" };
     }
+
+    if (state === "fail") {
+      return { done: true, error: data.data?.failMsg || "Generation failed" };
+    }
+
+    return { done: false };
+  } catch {
+    return { done: false };
   }
-  throw new Error("Timeout: imagen no completada en 2 minutos");
 }
 
 export async function POST(req: NextRequest) {
@@ -62,7 +59,7 @@ export async function POST(req: NextRequest) {
       console.log(`[kie] Converted relative path to absolute: ${absoluteImageUrl}`);
     }
 
-    const results: string[] = [];
+    const taskIds: string[] = [];
 
     for (let i = 0; i < numImages; i++) {
       console.log(`[kie] Creating ${model} task ${i + 1}/${numImages}...`);
@@ -104,14 +101,47 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "No se pudo crear la tarea" }, { status: 500 });
       }
 
-      console.log(`[kie] Task ${taskId}, polling...`);
-      const imageUrl = await pollForResult(taskId, apiKey);
-      results.push(imageUrl);
+      taskIds.push(taskId);
+      console.log(`[kie] Task ${taskId} created`);
     }
 
-    return NextResponse.json({ images: results, aspectRatio, count: results.length });
+    return NextResponse.json({ taskIds, status: "processing" });
   } catch (err: any) {
     console.error("[generate-image] error:", err?.message || err);
     return NextResponse.json({ error: `Error: ${err?.message || "Error desconocido"}` }, { status: 500 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const taskIdsStr = searchParams.get("taskIds");
+
+  if (!taskIdsStr) {
+    return NextResponse.json({ error: "taskIds requerido" }, { status: 400 });
+  }
+
+  const apiKey = process.env.FLUX_API_KEY || process.env.BFL_API_KEY || "";
+  const taskIds = taskIdsStr.split(",").filter(Boolean);
+
+  const images: string[] = [];
+  let allDone = true;
+
+  for (const taskId of taskIds) {
+    const result = await checkTask(taskId, apiKey);
+
+    if (!result.done) {
+      allDone = false;
+      continue;
+    }
+
+    if (result.url) {
+      images.push(result.url);
+    }
+  }
+
+  if (!allDone) {
+    return NextResponse.json({ status: "processing", images });
+  }
+
+  return NextResponse.json({ status: "done", images });
 }
