@@ -22,3 +22,12 @@ export function getMexicoTodayEndTs(): number {
 export function getMexicoDateString(): string {
   return getMexicoDate().toISOString().split("T")[0];
 }
+
+// Converts a "YYYY-MM-DD" date string to a Unix timestamp in Mexico City timezone.
+// endOfDay: false = 00:00:00, true = 23:59:59
+export function dateToMexicoTs(dateStr: string, endOfDay: boolean): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const utcMidnight = Date.UTC(y, m - 1, d) / 1000;
+  const mxMidnight = utcMidnight + 6 * 3600;
+  return endOfDay ? mxMidnight + 86400 - 1 : mxMidnight;
+}

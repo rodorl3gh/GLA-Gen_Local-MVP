@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { dateToMexicoTs } from "@/lib/mexico-timezone";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -14,14 +15,12 @@ export async function GET(req: NextRequest) {
 
   let fromTs = now - 30 * 86400;
   if (from) {
-    const [fy, fm, fd] = from.split("-").map(Number);
-    fromTs = Math.floor(new Date(fy, fm - 1, fd).getTime() / 1000);
+    fromTs = dateToMexicoTs(from, false);
   }
 
   let toTs = now;
   if (to) {
-    const [ty, tm, td] = to.split("-").map(Number);
-    toTs = Math.floor(new Date(ty, tm - 1, td, 23, 59, 59).getTime() / 1000);
+    toTs = dateToMexicoTs(to, true);
   }
 
   let orders = db
